@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+langchain_decorators = {editable = true, path = "."}
+langchain = "*"
+promptwatch="*"
+pydantic = "*"
+
+[dev-packages]
+ipykernel = "*"
+persistqueue = "*"
+autopep8 = "*"
+openai = "*"
+
+[requires]
+python_version = "3.9"
