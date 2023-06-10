@@ -91,6 +91,7 @@ To pass any of these, just declare them in the function (or use kwargs to pass a
 
 ```python
 
+@llm_prompt()
 async def write_me_short_post(topic:str, platform:str="twitter", memory:SimpleMemory = None):
     """
     {history_key}
@@ -120,7 +121,9 @@ The streaming will happen only if we call it in streaming context ... there we c
 
 from langchain_decorators import StreamingContext, llm_prompt
 
-@llm_prompt(capture_stream=True) # this will mark the prompt for streaming (usefull if we want stream just some prompts)
+# this will mark the prompt for streaming (useful if we want stream just some prompts in our app... but don't want to pass distribute the callback handlers)
+# note that only async functions can be streamed (will get an error if it's not)
+@llm_prompt(capture_stream=True) 
 async def write_me_short_post(topic:str, platform:str="twitter", audience:str = "developers"):
     """
     Write me a short header for my post about {topic} for {platform} platform. 
@@ -129,18 +132,19 @@ async def write_me_short_post(topic:str, platform:str="twitter", audience:str = 
     """
     pass
 
-async def run_prompt():
-    return await write_me_short_post(topic="Releasing a new App that can do real magic!")
 
+
+# just an arbitrary  function to demonstrate the streaming... wil be some websockets code in the real world
 tokens=[]
 def capture_stream_func(new_token:str):
     tokens.append(new_token)
 
-
+# if we want to capture the stream, we need to wrap the execution into StreamingContext... 
+# this will allow us to capture the stream even if the prompt call is hidden inside higher level method
+# only the prompts marked with capture_stream will be captured here
 with StreamingContext(stream_to_stdout=True, callback=capture_stream_func):
     result = await run_prompt()
     print("Stream finished ... we can distinguish tokens thanks to alternating colors")
-
 
 
 print("\nWe've captured",len(tokens),"tokens🎉\n")
@@ -156,7 +160,7 @@ By default the prompt is is the whole function docs, unless you mark your prompt
 
 We can specify what part of our docs is the prompt definition, by specifying a code block with **<prompt>** language tag
 
-```
+``` python
 @llm_prompt
 def write_me_short_post(topic:str, platform:str="twitter", audience:str = "developers"):
     """
@@ -235,7 +239,7 @@ the roles here are model native roles (assistant, user, system for chatGPT)
 
 the syntax for this is as follows:
 
-```
+``` python
 @llm_prompt
 def prompt_with_optional_partials():
     """
@@ -275,7 +279,7 @@ write_name_suggestions(company_business="sells cookies", count=5)
 for dict / pydantic you need to specify the formatting instructions... 
 this can be tedious, that's why you can let the output parser gegnerate you the instructions based on the model (pydantic)
 
-```
+``` python
 from langchain_decorators import llm_prompt
 from pydantic import BaseModel, Field
 
@@ -304,7 +308,7 @@ print("company employees: ",company.employees)
 
 # Binding the prompt to an object
 
-```
+``` python
 from pydantic import BaseModel
 from langchain_decorators import llm_prompt
 
@@ -345,8 +349,8 @@ print(personality.introduce_your_self(personality))
 
 # More examples:
 
-- these and few more examples are also available in the [examples notebook here ](/example_notebook.ipynb)
-- including the ReAct Agent re-implementation using purely langchain decorators
+- these and few more examples are also available in the [examples notebook here](https://colab.research.google.com/drive/1no-8WfeP6JaLD9yUtkPgym6x0G9ZYZOG#scrollTo=N4cf__D0E2Yk)
+- including the [ReAct Agent re-implementation](https://colab.research.google.com/drive/1no-8WfeP6JaLD9yUtkPgym6x0G9ZYZOG#scrollTo=3bID5fryE2Yp) using purely langchain decorators
 
 
 # Contributing
