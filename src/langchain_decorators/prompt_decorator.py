@@ -253,7 +253,7 @@ def llm_prompt(
                 llmChain, chain_args = prepare_call_args(*args, **kwargs)
 
                 try:
-                    result = await llmChain.predict(**chain_args)
+                    result = await llmChain.apredict(**chain_args)
                     if verbose or prompt_type:
                         print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if not verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
                     if llmChain.prompt.output_parser:
