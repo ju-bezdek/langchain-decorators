@@ -1,6 +1,6 @@
 # LangChain Decorators ✨
 
-lanchchain decorators is a layer on the top op LangChain that provides syntactic sugar🍭 for writing custom langchain prompts and chains
+lanchchain decorators is a layer on the top op LangChain that provides syntactic sugar 🍭 for writing custom langchain prompts and chains
 
 > **Note:** This is an unofficial addon to langchain library. It's not trying to compete, just to make using it easier. Lot's of ideas here are totally opinionated 
 
@@ -33,6 +33,18 @@ write_me_short_post(topic="starwars")
 # or
 write_me_short_post(topic="starwars", platform="redit")
 ```
+
+# Quick start
+## Installation
+```bash
+pip install langchain_decorators
+```
+
+## Examples
+
+Good idea on how to start is to review the examples here:
+ - [jupyter notebook](example_notebook.ipynb)
+ - [colab notebook](https://colab.research.google.com/drive/1no-8WfeP6JaLD9yUtkPgym6x0G9ZYZOG#scrollTo=N4cf__D0E2Yk)
 
 # Defining other parameters
 Here we are just marking a function as a prompt with `llm_prompt` decorator, turning it effectively into a LLMChain. Instead of running it 
