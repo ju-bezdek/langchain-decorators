@@ -18,7 +18,7 @@ from langchain.schema import PromptValue, BaseOutputParser
 
 from promptwatch import register_prompt_template
 
-from .common import GlobalSettings, LogColors, PromptTypeSettings, print_log
+from .common import LogColors, PromptTypeSettings, print_log
 from .output_parsers import *
 
 
@@ -306,7 +306,7 @@ class PromptDecoratorTemplate(StringPromptTemplate):
             kwargs[self.format_instructions_parameter_key] = self.output_parser.get_format_instructions()
             
         final_template = self.get_final_template(**kwargs)
-        kwargs = {k:v for k,v in  kwargs.items() if k in  final_template.input_variables}
+        kwargs = {k:(v if v is not None else "" ) for k,v in  kwargs.items() if k in  final_template.input_variables}
         if isinstance(final_template,ChatPromptTemplate):
 
             for msg in list(final_template.messages):
