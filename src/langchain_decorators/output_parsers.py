@@ -106,10 +106,13 @@ class PydanticOutputParser(BaseOutputParser[T]):
             raise OutputParserExceptionWithOriginal(msg, text)
 
         except ValidationError as e:
-            raise OutputParserExceptionWithOriginal(
-                f"Data are not in correct format: {text}\nGot: {e}", text)
-
-    def get_json_example_description(self, model: Type[BaseModel], indentation_level=0):
+            try:
+                json_dict_aligned = align_fields_with_model(json_dict, self.model)
+                return self.model.parse_obj(json_dict_aligned)
+            except ValidationError as e:
+                raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {text}\nGot: {e}",text) 
+        
+    def get_json_example_description(self, model:Type[BaseModel], indentation_level=0):
         field_descriptions = {}
         for field, field_info in model.__fields__.items():
 
@@ -147,9 +150,8 @@ class PydanticOutputParser(BaseOutputParser[T]):
                 field_descriptions[field] = ("an integer")
             elif _type == float:
                 field_descriptions[field] = ("a float number")
-
-            if _nullable:
-                field_descriptions[field] = field_descriptions[field] + f" or null"
+            else:
+                field_descriptions[field] = "?"            
 
         lines = []
         for field, field_info in model.__fields__.items():
@@ -252,10 +254,12 @@ class MarkdownStructureParser(ListOutputParser):
                     if all_sub_str:
 
                         self.sections_parsers[field] = MarkdownStructureParser(
-                            field_type, sections_parsers=sections_parsers.get(field), level=level+1)
+                                model=field_type, sections_parsers=sections_parsers.get(field), level=level+1
+                            )
                     else:
                         self.sections_parsers[field] = PydanticOutputParser(
-                            model=field_type)
+                                model=field_type
+                            )
 
                 elif field_type == str:
 
@@ -340,8 +344,11 @@ class MarkdownStructureParser(ListOutputParser):
             try:
                 return self.model(**res)
             except ValidationError as e:
-                raise OutputParserExceptionWithOriginal(
-                    f"Data are not in correct format: {text}\nGot: {e}", text)
+                try:
+                    res_aligned = align_fields_with_model(res, self.model)
+                    return self.model.parse_obj(res_aligned)
+                except ValidationError as e:
+                    raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {text}\nGot: {e}",text) 
         else:
             return res
 
@@ -369,15 +376,15 @@ def _get_str_field_description(field_info: ModelField, ignore_nullable: bool = F
     if _description:
         description.append(_description)
     if _one_of:
-        description += "one of these values: [ "
-        description += " | ".join(_one_of)
-        description += " ]"
+        description.append("one of these values: [ ")
+        description.append(" | ".join(_one_of))
+        description.append(" ]")
     if _example:
-        description += f"e.g. {_example}"
+        description.append(f"e.g. {_example}")
     if _nullable and not ignore_nullable:
-        description += "... or 'N/A' if not available"
+        description.append("... or null if not available")
     if _regex and not _one_of:
-        description += f"... must match this regex: {_regex}"
+        description.append(f"... must match this regex: {_regex}")
 
     if description:
         description = " ".join(description)
