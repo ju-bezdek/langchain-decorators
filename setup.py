@@ -23,6 +23,7 @@ setuptools.setup(name='langchain-decorators',
                  ],
                  python_requires='>=3.9',
                  install_requires=[
-                     "langchain"
+                     "langchain",
+                     "promptwatch"
                  ]
                  )
