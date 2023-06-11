@@ -1,0 +1,9 @@
+_ignore*
+__pycache__
+.*/
+.DS_Store
+build
+dist
+x_*.py
+x_*.md
+src/langchain_decorators.egg-info/*
