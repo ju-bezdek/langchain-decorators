@@ -81,7 +81,7 @@ def llm_prompt(
         # this is the case when the decorator is called without arguments
         # we initialize params with default values
         func = prompt_type
-        prompt_type = None
+        prompt_type = PromptTypes.UNDEFINED
     else:
         func = None
     

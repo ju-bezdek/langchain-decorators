@@ -62,6 +62,8 @@ class LogColors(Enum):
     MAGENTA = '\033[35m'
     CYAN = '\033[36m'
     DARK_GRAY = '\033[90m'
+    WHITE = '\033[39m'
+    BLACK_AND_WHITE = '\033[40m'
 
     # Define some reset codes to restore the default text color
     RESET = '\033[0m'
@@ -107,7 +109,7 @@ class PromptTypeSettings:
 
 class PromptTypes:
     UNDEFINED: PromptTypeSettings = PromptTypeSettings(
-        color=LogColors.GREEN, log_level=logging.DEBUG)
+        color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
     AGENT_REASONING: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.GREEN, log_level=logging.INFO)
     TOOL: PromptTypeSettings = PromptTypeSettings(
