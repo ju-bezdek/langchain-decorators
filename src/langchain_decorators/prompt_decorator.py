@@ -202,18 +202,22 @@ def llm_prompt(
             chain_args = kwargs
             return llmChain, chain_args
         
-        def get_retry_parse_call_args(prompt_template:PromptDecoratorTemplate, exception:OutputParserExceptionWithOriginal):
+        def get_retry_parse_call_args(prompt_template:PromptDecoratorTemplate, exception:OutputParserExceptionWithOriginal, get_original_prompt:Callable):
             logging.warning(msg=f"Failed to parse output for {full_name}: {exception}\nRetrying...")
             if format_instructions_parameter_key not in prompt_str:
                 logging.warning(f"Please note that we didn't find a {format_instructions_parameter_key} parameter in the prompt string. If you don't include it in your prompt template, you need to provide your custom formatting instructions.")    
-            retry_parse_template = PromptTemplate.from_template("This is an input {original} but it's not in correct format, please convert it into following format:\n{format_instructions}\n\nIf the input doesn't seem to be relevant to the expected format instructions, return 'N/A'")
+            if exception.original_prompt_needed_on_retry:
+                original_prompt=get_original_prompt()
+            else:
+                original_prompt=""
+            retry_parse_template = PromptTemplate.from_template("{original_prompt}This is our original response {original} but it's not in correct format, please convert it into following format:\n{format_instructions}\n\nIf the response doesn't seem to be relevant to the expected format instructions, return 'N/A'")
             register_prompt_template("retry_parse_template", retry_parse_template)
             prompt_llm=llm or GlobalSettings.get_current_settings().default_llm
             retryChain = LLMChain(llm=prompt_llm, prompt=retry_parse_template)
             format_instructions = prompt_template.output_parser.get_format_instructions()
             if not format_instructions:
                 raise Exception(f"Failed to get format instructions for {full_name} from output parser {prompt_template.output_parser}.")
-            call_kwargs = {"original":exception.original, "format_instructions":format_instructions}
+            call_kwargs = {"original_prompt":original_prompt, "original":exception.original, "format_instructions":format_instructions}
             return retryChain, call_kwargs
 
 
@@ -231,18 +235,20 @@ def llm_prompt(
                         print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
                     if llmChain.prompt.output_parser:
                         result = llmChain.prompt.output_parser.parse(result)
-                        
+                    
                 except OutputParserException as e:
                     if retry_on_output_parsing_error and isinstance(e, OutputParserExceptionWithOriginal):
                         prompt_template = llmChain.prompt 
-                        retryChain, call_kwargs = get_retry_parse_call_args(prompt_template, e)
+                        retryChain, call_kwargs = get_retry_parse_call_args(prompt_template, e, lambda: llmChain.prompt.format(**chain_args))
                         result = retryChain.predict(**call_kwargs)
+                        if verbose or prompt_type:
+                            print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if not verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
                         parsed = prompt_template.output_parser.parse(result)
-                        print_log(log_object=f"> Finished chain", log_level=prompt_type.log_level if prompt_type else logging.DEBUG,color=LogColors.WHITE_BOLD)
                         return parsed
                     else: 
                         raise e
 
+                print_log(log_object=f"> Finished chain", log_level=prompt_type.log_level if prompt_type else logging.DEBUG,color=LogColors.WHITE_BOLD)
                 return result
             return wrapper
         
@@ -260,19 +266,21 @@ def llm_prompt(
                         print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if not verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
                     if llmChain.prompt.output_parser:
                         result = llmChain.prompt.output_parser.parse(result)
-                    print_log(log_object=f"> Finished chain", log_level=prompt_type.log_level if prompt_type else logging.DEBUG,color=LogColors.WHITE_BOLD)
+                    
                     
                 except OutputParserException as e:
                     if retry_on_output_parsing_error and isinstance(e, OutputParserExceptionWithOriginal):
                         prompt_template = llmChain.prompt 
-                        retryChain, call_kwargs = get_retry_parse_call_args(prompt_template, e)
+                        retryChain, call_kwargs = get_retry_parse_call_args(prompt_template, e, lambda: llmChain.prompt.format(**chain_args))
                         result = await retryChain.apredict(**call_kwargs)
+                        if verbose or prompt_type:
+                            print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if not verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
                         parsed = prompt_template.output_parser.parse(result)
-                        print_log(log_object=f"> Finished chain", log_level=prompt_type.log_level if prompt_type else logging.DEBUG,color=LogColors.WHITE_BOLD)
                         return parsed
                     else: 
                         raise e
 
+                print_log(log_object=f"> Finished chain", log_level=prompt_type.log_level if prompt_type else logging.DEBUG,color=LogColors.WHITE_BOLD)
                 return result
             return async_wrapper
         
