@@ -16,9 +16,10 @@ from .pydantic_helpers import *
 class OutputParserExceptionWithOriginal(OutputParserException):
     """Exception raised when an output parser fails to parse the output of an LLM call."""
 
-    def __init__(self, message: str, original: str) -> None:
+    def __init__(self, message: str, original: str, original_prompt_needed_on_retry:bool=False) -> None:
         super().__init__(message)
         self.original = original
+        self.original_prompt_needed_on_retry=original_prompt_needed_on_retry
 
     def __str__(self) -> str:
         return f"{super().__str__()}\nOriginal output:\n{self.original}"
@@ -45,9 +46,36 @@ class ListOutputParser(BaseOutputParser):
         """Instructions on how the LLM output should be formatted."""
         return "Return result a s bulleted list."
 
+class BooleanOutputParser(BaseOutputParser):
+    """Class to parse the output of an LLM call to a boolean."""
+    pattern:str
+    
+    @property
+    def _type(self) -> str:
+        return "boolean"
+    
+    def __init__(self, pattern: str = r"((Yes)|(No))([,|.|!]|$)") -> None:
+        super().__init__(pattern=pattern)
+
+    def parse(self, text: str) -> bool:
+        """Parse the output of an LLM call."""
+
+        
+        
+        match = re.search(self.pattern, text, flags=re.MULTILINE | re.IGNORECASE)
+        
+        if not match:
+            raise OutputParserExceptionWithOriginal(message=self.get_format_instructions(),original=text, original_prompt_needed_on_retry=True)
+        else:
+            return match.group(1).lower() == "yes"
+        
+
+    def get_format_instructions(self) -> str:
+        """Instructions on how the LLM output should be formatted."""
+        return "Reply only Yes or No.\nUse this format: Final decision: Yes/No"
 
 class JsonOutputParser(BaseOutputParser):
-    """Class to parse the output of an LLM call to a list."""
+    """Class to parse the output of an LLM call to a Json."""
 
     @property
     def _type(self) -> str:
@@ -78,7 +106,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class PydanticOutputParser(BaseOutputParser[T]):
-    """Class to parse the output of an LLM call to a list."""
+    """Class to parse the output of an LLM call to a pydantic object."""
     model: Type[T]
     instructions_as_json_example: bool = True
 
@@ -92,8 +120,7 @@ class PydanticOutputParser(BaseOutputParser[T]):
     def parse(self, text: str) -> T:
         try:
             # Greedy search for 1st json candidate.
-            match = re.search(r"\{.*\}", text.strip(),
-                              re.MULTILINE | re.IGNORECASE | re.DOTALL)
+            match = re.search(r"\{.*\}", text.strip(),re.MULTILINE | re.IGNORECASE | re.DOTALL)
             json_str = ""
             if match:
                 json_str = match.group()
@@ -110,7 +137,8 @@ class PydanticOutputParser(BaseOutputParser[T]):
                 json_dict_aligned = align_fields_with_model(json_dict, self.model)
                 return self.model.parse_obj(json_dict_aligned)
             except ValidationError as e:
-                raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {text}\nGot: {e}",text) 
+                err_msg =humanize_pydantic_validation_error(e)
+                raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {text}Errors: {err_msg}",text) 
         
     def get_json_example_description(self, model:Type[BaseModel], indentation_level=0):
         field_descriptions = {}
@@ -207,6 +235,8 @@ class CheckListParser(ListOutputParser):
         pattern = r"^[ \t]*(?:[\-\*\+]|\d+\.)[ \t]+(.+)$"
         matches = re.findall(pattern, text, flags=re.MULTILINE)
         result = {}
+        if not matches:
+            raise OutputParserExceptionWithOriginal(message="No matches found", original_output=text)
         for match in matches:
             key, value = match.split(":", 1)
             result[key.strip()] = value.strip()
@@ -348,7 +378,8 @@ class MarkdownStructureParser(ListOutputParser):
                     res_aligned = align_fields_with_model(res, self.model)
                     return self.model.parse_obj(res_aligned)
                 except ValidationError as e:
-                    raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {text}\nGot: {e}",text) 
+                    err_msg =humanize_pydantic_validation_error(e)
+                    raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {text}\nGot: {err_msg}",text) 
         else:
             return res
 

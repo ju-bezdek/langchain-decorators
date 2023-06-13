@@ -234,6 +234,8 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                 output_parser = "json"
             elif return_type==list:
                 output_parser = "list"
+            elif return_type==bool:
+                output_parser = "boolean"
             elif issubclass(return_type,BaseModel):
                 output_parser = PydanticOutputParser(model=return_type)
             else:
@@ -243,6 +245,8 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                 output_parser = None
             elif output_parser=="json":
                 output_parser = JsonOutputParser()
+            elif output_parser=="boolean":
+                output_parser = BooleanOutputParser()
             elif output_parser=="markdown":
                 if return_type and return_type!=dict:
                     raise Exception(f"Conflicting output parsing instructions. Markdown output parser only supports return type dict, got {return_type}.")
@@ -332,9 +336,9 @@ class PromptDecoratorTemplate(StringPromptTemplate):
     def on_prompt_formatted(self, formatted:str):
         if not self.prompt_type :
             log_level = logging.DEBUG
-            log_color =  LogColors.DARK_GRAY
         else:
             log_level = self.prompt_type.log_level
-            log_color = self.prompt_type.color
+            
+        log_color =  LogColors.DARK_GRAY # we dont want to color the prompt, is's misleading... we color only the output
         print_log(f"Prompt:\n{formatted}",  log_level , log_color)
 

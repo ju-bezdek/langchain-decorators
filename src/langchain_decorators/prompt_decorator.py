@@ -1,5 +1,4 @@
 
-from ast import Tuple
 import logging
 import inspect
 
@@ -56,13 +55,16 @@ def llm_prompt(
 
             `str` or `None` - will return plain string output
 
+            `list` - will parse bullet or numbered list (each item on a new line) as a list
+
+            `boolean` - will parse the output as boolean. Expects clear Yes/No in the output
+
             `json` - will parse the output as json
 
             `markdown` - will parse the output as markdown sections, the name of each section will be returned as a key and the content as a value. For nested sections, the value will be a dict with the same structure.
 
             `pydantic` - will parse the output as json and then convert into a pydantic model
 
-            `list` - will parse bullet or numbered list (each item on a new line) as a list
 
         `stop_tokens` (Optional[List[str]]): list of stop tokens to instruct the LLM to stop generating text when it encounters any of these tokens. If not provided, the default stop tokens of the LLM will be used.
 

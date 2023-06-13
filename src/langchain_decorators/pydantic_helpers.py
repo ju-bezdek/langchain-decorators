@@ -1,6 +1,6 @@
 
 from typing import Type
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pydantic.fields import ModelField
 
 
@@ -64,3 +64,6 @@ def align_fields_with_model( data:dict, model:Type[BaseModel]) -> dict:
         res[field]=value
     return res
     
+
+def humanize_pydantic_validation_error(validation_error:ValidationError):
+     return "\n".join([ f'{".".join(err.get("loc"))} - {err.get("msg")} ' for err in  validation_error.errors()])
