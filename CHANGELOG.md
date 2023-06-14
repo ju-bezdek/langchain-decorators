@@ -13,5 +13,10 @@
 - better pydantic and markdown output parser... now can self fix casing problems with keys (i.e. field in schema is "ceo_salary", now will accept "CEO salary" as well as "CeoSalary" and any other variations)
 
 ## Version 0.0.4 (2023-06-12)
-- improved `pydantic` parser is not more tolerant to casing (accepts pascalCase, snake_case, CamelCase field names, no matter what what casing uses model)
+- improved `pydantic` parser is not more tolerant to the casing (accepts pascalCase, snake_case, CamelCase field names, no matter what casing uses model)
 - added boolean output parser
+
+
+## Version 0.0.5 (2023-06-14)
+- support for openAI functions 🚀 
+

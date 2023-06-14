@@ -1,9 +1,12 @@
+from ast import Tuple
+import inspect
 import logging
+from textwrap import dedent
 import yaml
 from enum import Enum
-from typing import Any, Union, Optional
-from pydantic import BaseModel, Extra
-
+from typing import Any, Coroutine, Dict, Union, Optional
+from pydantic import BaseConfig, BaseModel, Extra
+from pydantic.fields import ModelField
 from langchain.llms.base import BaseLanguageModel
 from langchain.chat_models import ChatOpenAI
 
@@ -31,9 +34,9 @@ class GlobalSettings(BaseModel):
                         **kwargs
                         ):
         if default_llm is None:
-            default_llm = ChatOpenAI(temperature=0.0)
+            default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0613")
         if default_streaming_llm is None:
-            default_streaming_llm = ChatOpenAI(temperature=0.0, streaming=True)
+            default_streaming_llm = ChatOpenAI(temperature=0.0, streaming=True, model="gpt-3.5-turbo-0613")
         settings = cls(default_llm=default_llm, default_streaming_llm=default_streaming_llm,
                        logging_level=logging_level, stdout_logging=stdout_logging, verbose=verbose,  **kwargs)
         if not hasattr(GlobalSettings, "registry"):
@@ -116,3 +119,50 @@ class PromptTypes:
         color=LogColors.BLUE, log_level=logging.INFO)
     FINAL_OUTPUT: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.YELLOW, log_level=logging.INFO)
+
+
+def get_func_return_type(func: callable)->Tuple:
+    return_type = func.__annotations__.get("return",None)
+    if inspect.iscoroutinefunction(func):
+        if return_type and issubclass(return_type, Coroutine):
+            return_type_args = getattr(return_type, '__args__', None)
+            if return_type_args and len(return_type_args) == 3:
+                return_type = return_type_args[2]
+            else:
+                raise Exception(f"Invalid Coroutine annotation {return_type}. Expected Coroutine[ any , any, <return_type>] or just <return_type>")
+            
+def get_function_docs(func: callable)->Tuple:
+    fist_line, rest = func.__doc__.split('\n', 1)
+    # we dedent the first line separately,because its common that it often starts right after """
+    fist_line = fist_line.strip()
+    if fist_line:
+        fist_line+="\n"
+    docs = fist_line + dedent(rest)
+    return docs
+    
+
+            
+def get_function_full_name(func: callable)->str:
+    return  f"{func.__module__}.{func.__name__}" if not func.__module__=="__main__" else func.__name__
+    
+
+
+def get_arguments_as_pydantic_fields(func) -> Dict[str, ModelField]:
+    argument_types = {}
+    model_config = BaseConfig()
+    for arg_name, arg_desc in inspect.signature(func).parameters.items():
+        if arg_name != "self":
+            default = arg_desc.default if arg_desc.default!=inspect.Parameter.empty else None
+            argument_types[arg_name] = ModelField(
+                class_validators=None,
+                model_config=model_config,
+                name=arg_name, 
+                type_=arg_desc.annotation,
+                default=default,
+                required= arg_desc.default==inspect.Parameter.empty
+                )
+            
+    return argument_types
+
+
+

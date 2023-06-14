@@ -2,4 +2,8 @@ from .common import LogColors, GlobalSettings, print_log, PromptTypes, PromptTyp
 from .prompt_decorator import PromptDecoratorTemplate
 from .streaming_context import StreamingContext
 from .prompt_decorator import llm_prompt
-__version__="0.0.4"
+from .function_decorator import llm_function
+
+__version__="0.0.5"
+
+

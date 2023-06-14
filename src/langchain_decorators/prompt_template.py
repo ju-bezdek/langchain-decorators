@@ -18,7 +18,7 @@ from langchain.schema import PromptValue, BaseOutputParser
 
 from promptwatch import register_prompt_template
 
-from .common import LogColors, PromptTypeSettings, print_log
+from .common import LogColors, PromptTypeSettings, get_func_return_type, get_function_docs, get_function_full_name, print_log
 from .output_parsers import *
 
 
@@ -209,24 +209,10 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                   prompt_type:PromptTypeSettings = None
                   )->"PromptDecoratorTemplate":
         
-        
-        fist_line, rest = func.__doc__.split('\n', 1)
-        # we dedent the first line separately,because its common that it often starts right after """
-        fist_line = fist_line.strip()
-        if fist_line:
-            fist_line+="\n"
-        template_string = fist_line + dedent(rest)
-        
-        
-        template_name=template_name or f"{func.__module__}.{func.__name__}" if not func.__module__=="__main__" else func.__name__
-        return_type = func.__annotations__.get("return",None)
-        if inspect.iscoroutinefunction(func):
-            if return_type and issubclass(return_type, Coroutine):
-                return_type_args = getattr(return_type, '__args__', None)
-                if return_type_args and len(return_type_args) == 3:
-                    return_type = return_type_args[2]
-                else:
-                    raise Exception(f"Invalid Coroutine annotation {return_type}. Expected Coroutine[ any , any, <return_type>] or just <return_type>")
+        template_string = get_function_docs(func)  
+        template_name=template_name or get_function_full_name(func)
+        return_type = get_func_return_type(func)
+      
         if output_parser=="auto":
             if return_type==str or return_type==None:
                 output_parser = "str"

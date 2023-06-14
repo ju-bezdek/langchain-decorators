@@ -8,11 +8,15 @@ from typing import Callable, List, Optional, Sequence, Union
 
 
 from langchain import LLMChain,  PromptTemplate
-
+from langchain.tools.base import BaseTool
 from langchain.schema import BaseOutputParser
 from langchain.llms.base import BaseLanguageModel
 
 from promptwatch import register_prompt_template
+
+from .schema import OutputWithFunctionCall
+
+from .chains import LLMChainWithFunctionSupport
 
 
 
@@ -20,7 +24,6 @@ from .common import *
 from .prompt_template import PromptDecoratorTemplate
 from .output_parsers import *
 from .streaming_context import StreamingContext
-
 
 
 def llm_prompt(
@@ -97,12 +100,16 @@ def llm_prompt(
             prompt_type = PromptTypeSettings(color=LogColors.DARK_GRAY,log_level=100, capture_stream=capture_stream)
             
     
-        
+    
     def decorator(func):
         prompt_str = dedent(func.__doc__)
         name=func.__name__
         full_name=f"{func.__module__}.{name}" if func.__module__!="__main__" else name
         is_async = inspect.iscoroutinefunction(func)
+
+
+        
+
         if prompt_type:
             _capture_stream = prompt_type.capture_stream if capture_stream is None else capture_stream
         else:
@@ -160,6 +167,13 @@ def llm_prompt(
             else:
                 memory=None
 
+            if "functions" in kwargs:
+                functions=kwargs.pop("functions")
+            else:
+                functions=None
+
+
+
             prompt_template = PromptDecoratorTemplate.from_func(func, 
                                                             template_format=template_format, 
                                                             output_parser=output_parser, 
@@ -171,7 +185,10 @@ def llm_prompt(
             if prompt_template.default_values:
                 kwargs = {**prompt_template.default_values, **kwargs}
 
-            llmChain = LLMChain(llm=prompt_llm, prompt=prompt_template,  memory=memory)
+            if functions:
+                llmChain = LLMChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions)
+            else:
+                llmChain = LLMChain(llm=prompt_llm, prompt=prompt_template,  memory=memory)
             other_supported_kwargs={"stop","callbacks"}
             unexpected_inputs = [key for key in kwargs if key not in prompt_template.input_variables and key not in other_supported_kwargs ]
             if unexpected_inputs:
@@ -181,6 +198,9 @@ def llm_prompt(
             if format_instructions_parameter_key in missing_inputs:
                 missing_inputs.remove(format_instructions_parameter_key)
                 kwargs[format_instructions_parameter_key]=None #init the format instructions with None... will be filled later
+            if memory and memory.memory_key in missing_inputs:
+                missing_inputs.remove(memory.memory_key)
+
             if missing_inputs:
                 if input_variables_source:
                     missing_value={}
@@ -199,8 +219,8 @@ def llm_prompt(
 
             if stop_tokens:
                 kwargs["stop"]=stop_tokens
-            chain_args = kwargs
-            return llmChain, chain_args
+            call_args = {"inputs":kwargs, "return_only_outputs":True}
+            return llmChain, call_args
         
         def get_retry_parse_call_args(prompt_template:PromptDecoratorTemplate, exception:OutputParserExceptionWithOriginal, get_original_prompt:Callable):
             logging.warning(msg=f"Failed to parse output for {full_name}: {exception}\nRetrying...")
@@ -219,7 +239,13 @@ def llm_prompt(
                 raise Exception(f"Failed to get format instructions for {full_name} from output parser {prompt_template.output_parser}.")
             call_kwargs = {"original_prompt":original_prompt, "original":exception.original, "format_instructions":format_instructions}
             return retryChain, call_kwargs
-
+        
+        def process_results(llmChain, result_data, result, is_function_call):
+            log_results(result_data, result, is_function_call, verbose, prompt_type)
+            if llmChain.prompt.output_parser:
+                if result or not is_function_call:
+                    result = llmChain.prompt.output_parser.parse(result)
+            return result
 
         if not is_async:
 
@@ -230,11 +256,12 @@ def llm_prompt(
                 llmChain, chain_args = prepare_call_args(*args, **kwargs)
 
                 try:
-                    result = llmChain.predict(**chain_args)
-                    if verbose or prompt_type:
-                        print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
-                    if llmChain.prompt.output_parser:
-                        result = llmChain.prompt.output_parser.parse(result)
+                    result_data = llmChain(**chain_args)
+
+                    result = result_data[llmChain.output_key]
+                    is_function_call = result_data.get("function_call_info")
+                    result = process_results(llmChain, result_data, result,is_function_call)
+                        
                     
                 except OutputParserException as e:
                     if retry_on_output_parsing_error and isinstance(e, OutputParserExceptionWithOriginal):
@@ -249,7 +276,13 @@ def llm_prompt(
                         raise e
 
                 print_log(log_object=f"> Finished chain", log_level=prompt_type.log_level if prompt_type else logging.DEBUG,color=LogColors.WHITE_BOLD)
+                if "function_call_info" in result_data:
+                    return _generate_output_with_function_call(result=result, result_data=result_data, verbose=verbose,callbacks=kwargs.get("callbacks"))
                 return result
+
+            
+
+            
             return wrapper
         
         else:
@@ -261,11 +294,11 @@ def llm_prompt(
                 llmChain, chain_args = prepare_call_args(*args, **kwargs)
 
                 try:
-                    result = await llmChain.apredict(**chain_args)
-                    if verbose or prompt_type:
-                        print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if not verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
-                    if llmChain.prompt.output_parser:
-                        result = llmChain.prompt.output_parser.parse(result)
+                    
+                    result_data = await llmChain.acall(**chain_args)
+                    result = llmChain[llmChain.output_key]
+                    is_function_call = result_data.get("function_call_info")
+                    result = process_results(llmChain, result_data, result,is_function_call)
                     
                     
                 except OutputParserException as e:
@@ -281,12 +314,70 @@ def llm_prompt(
                         raise e
 
                 print_log(log_object=f"> Finished chain", log_level=prompt_type.log_level if prompt_type else logging.DEBUG,color=LogColors.WHITE_BOLD)
+                if "function_call_info" in result_data:
+                    return _generate_output_with_function_call(result=result, result_data=result_data, verbose=verbose,callbacks=kwargs.get("callbacks"))
                 return result
             return async_wrapper
-        
     if func:
         return decorator(func)
     else:
         return decorator
 
 
+
+
+def _generate_output_with_function_call(result:Any, result_data:dict, verbose, callbacks):
+    """ get parsed result, function call data from llm and list of functions and build  OutputWithFunctionCall """
+    # find the function first:
+    
+    _function = result_data["function"]
+    if result_data.get("function_call_info"):
+        _tool_arguments = result_data["function_call_info"]["arguments"]
+        if isinstance(_function, BaseTool):
+            # langchain hack >> "__arg1" as a single argument hack
+            _is_single_arg_hack="__arg1" in _tool_arguments and len(_tool_arguments)==1
+            tool_input= _tool_arguments["__arg1"] if _is_single_arg_hack else _tool_arguments
+            _tool_arguments = tool_input
+            def _sync_function(arguments=tool_input):
+                return _function.run(tool_input=arguments, verbose=verbose, callbacks=callbacks)
+            
+            async def _async_function(arguments=tool_input):
+                return await _function.arun(tool_input=arguments, verbose=verbose, callbacks=callbacks)
+                
+            
+
+        elif callable(_function):
+            # TODO: add support for verbose and callbacks
+            
+            is_async = inspect.iscoroutinefunction(_function)
+            
+            if is_async:
+                _async_function = _function
+                _sync_function = None
+            else:
+                _sync_function = _function
+                _async_function = None
+        else:
+            raise TypeError(f"Invalid function type: {_function} of type {type(_function)}")
+
+        return OutputWithFunctionCall(
+                output=result,
+                output_text=result_data["text"],
+                function=_sync_function,
+                function_async=_async_function,
+                function_name=result_data["function_call_info"]["name"],
+                function_args=result_data["function_call_info"]["arguments"],
+                function_arguments=_tool_arguments
+            )
+    else:
+        return OutputWithFunctionCall(
+                output=result,
+                output_text=result_data["text"],
+            )
+
+def log_results(result_data, result, is_function_call, verbose, prompt_type=None):
+    if verbose or prompt_type:
+        print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
+        if is_function_call:
+            function_call_info_str = json.dumps(result_data.get('function_call_info'),indent=4)
+            print_log(log_object=f"\nFunction call:\n{function_call_info_str}", log_level=prompt_type.log_level if verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
