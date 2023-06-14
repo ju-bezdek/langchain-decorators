@@ -44,10 +44,10 @@ def llm_function(
         ```
     - validate_docstrings: if True, the docstrings will be parsed and validated against function. If parsing or validation fails, an error will be raised
 
-    - docstring_format: the format of the docstring. Currently only markdown is supported
+    - docstring_format: the format of the docstring
         -  `auto` (default): the format is automatically inferred from the docstring
-        -  `google-docstring`: the docstring is parsed as markdown (see [Google docstring format](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html))
-        -  `numpy-docstring`: the docstring is parsed as markdown (see [Numpy docstring format](https://numpydoc.readthedocs.io/en/latest/format.html))
+        -  `google`: the docstring is parsed as markdown (see [Google docstring format](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html))
+        -  `numpy`: the docstring is parsed as markdown (see [Numpy docstring format](https://numpydoc.readthedocs.io/en/latest/format.html))
         -  `sphinx`: the docstring is parsed as sphinx format (see [Sphinx docstring format](https://sphinx-rtd-tutorial.readthedocs.io/en/latest/docstrings.html))
 
     Examples:
