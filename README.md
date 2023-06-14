@@ -46,123 +46,7 @@ Good idea on how to start is to review the examples here:
  - [jupyter notebook](example_notebook.ipynb)
  - [colab notebook](https://colab.research.google.com/drive/1no-8WfeP6JaLD9yUtkPgym6x0G9ZYZOG#scrollTo=N4cf__D0E2Yk)
 
-# Defining other parameters
-Here we are just marking a function as a prompt with `llm_prompt` decorator, turning it effectively into a LLMChain. Instead of running it 
 
-
-Standard LLMchain takes much more init parameter than just inputs_variables and prompt... here is this implementation detail hidden in the decorator.
-Here is how it works:
-
-1. Using **Global settings**:
-
-``` python
-# define global settings for all prompty (if not set - chatGPT is the current default)
-from langchain_decorators import GlobalSettings
-
-GlobalSettings.define_settings(
-    default_llm=ChatOpenAI(temperature=0.0), this is default... can change it here globally
-    default_streaming_llm=ChatOpenAI(temperature=0.0,streaming=True), this is default... can change it here for all ... will be used for streaming
-)
-```
-
-2. Using predefined **prompt types**
-
-``` python
-#You can change the default prompt types
-from langchain_decorators import PromptTypes, PromptTypeSettings
-
-PromptTypes.AGENT_REASONING.llm = ChatOpenAI()
-
-# Or you can just define your own ones:
-class MyCustomPromptTypes(PromptTypes):
-    GPT4=PromptTypeSettings(llm=ChatOpenAI(model="gpt-4"))
-
-@llm_prompt(prompt_type=MyCustomPromptTypes.GPT4) 
-def write_a_complicated_code(app_idea:str)->str:
-    ...
-
-```
-
-3.  Define the settings **directly in the decorator**
-
-``` python
-from langchain.llms import OpenAI
-
-@llm_prompt(
-    llm=OpenAI(temperature=0.7),
-    stop_tokens=["\nObservation"],
-    ...
-    )
-def creative_writer(book_title:str)->str:
-    ...
-```
-
-## Passing a memory and/or callbacks:
-
-To pass any of these, just declare them in the function (or use kwargs to pass anything)
-
-```python
-
-@llm_prompt()
-async def write_me_short_post(topic:str, platform:str="twitter", memory:SimpleMemory = None):
-    """
-    {history_key}
-    Write me a short header for my post about {topic} for {platform} platform. 
-    It should be for {audience} audience.
-    (Max 15 words)
-    """
-    pass
-
-await write_me_short_post(topic="old movies")
-
-```
-
-# Simplified streaming
-
-If we wan't to leverage streaming:
- - we need to define prompt as async function 
- - turn on the streaming on the decorator, or we can define PromptType with streaming on
- - capture the stream using StreamingContext
-
-This way we just mark which prompt should be streamed, not needing to tinker with what LLM should we use, passing around the creating and distribute streaming handler into particular part of our chain... just turn the streaming on/off on prompt/prompt type...
-
-The streaming will happen only if we call it in streaming context ... there we can define a simple function to handle the stream
-
-``` python
-# this code example is complete and should run as it is
-
-from langchain_decorators import StreamingContext, llm_prompt
-
-# this will mark the prompt for streaming (useful if we want stream just some prompts in our app... but don't want to pass distribute the callback handlers)
-# note that only async functions can be streamed (will get an error if it's not)
-@llm_prompt(capture_stream=True) 
-async def write_me_short_post(topic:str, platform:str="twitter", audience:str = "developers"):
-    """
-    Write me a short header for my post about {topic} for {platform} platform. 
-    It should be for {audience} audience.
-    (Max 15 words)
-    """
-    pass
-
-
-
-# just an arbitrary  function to demonstrate the streaming... wil be some websockets code in the real world
-tokens=[]
-def capture_stream_func(new_token:str):
-    tokens.append(new_token)
-
-# if we want to capture the stream, we need to wrap the execution into StreamingContext... 
-# this will allow us to capture the stream even if the prompt call is hidden inside higher level method
-# only the prompts marked with capture_stream will be captured here
-with StreamingContext(stream_to_stdout=True, callback=capture_stream_func):
-    result = await run_prompt()
-    print("Stream finished ... we can distinguish tokens thanks to alternating colors")
-
-
-print("\nWe've captured",len(tokens),"tokens🎉\n")
-print("Here is the result:")
-print(result)
-```
 
 
 # Prompt declarations
@@ -293,10 +177,80 @@ write_name_suggestions(company_business="sells cookies", count=5)
 - This will parse the description for LLM (first coherent paragraph is considered as function description) 
 - and aso parameter descriptions (Google, Numpy and Spihnx notations are supported for now)
 
-Then you pass these functions as arguments to and  @llm_prompt (the argument must be named `functions` ‼️)
-It you can pass any @llm_function there or a native LangChain tool 
+- by default the docstring format is automatically resolved, but setting the format of the docstring can speed things up a bit.
+        -  `auto` (default): the format is automatically inferred from the docstring
+        -  `google`: the docstring is parsed as markdown (see [Google docstring format](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html))
+        -  `numpy`: the docstring is parsed as markdown (see [Numpy docstring format](https://numpydoc.readthedocs.io/en/latest/format.html))
+        -  `sphinx`: the docstring is parsed as sphinx format (see [Sphinx docstring format](https://sphinx-rtd-tutorial.readthedocs.io/en/latest/docstrings.html))
 
-The output will be always `OutputWithFunctionCall`
+
+To annotate an *"enum"* like argument, you can use this "typescript" like format: `["value_a" | "value_b"]` ... if will be parsed out.
+This text will be a part of a description too... if you dont want it, you can use this notation as a type notation. 
+Example:
+```
+Args:
+    message_type (["email" | "sms"]): type of a message  / channel how to send the message
+        
+```
+
+
+Then you pass these functions as arguments to and  `@llm_prompt` (the argument must be named `functions` ‼️)
+here you can pass any @llm_function there or a native LangChain tool 
+
+
+here is how to use it:
+
+```python
+from langchain.agents import load_tools
+from langchian_decorators import llm_function, llm_prompt, GlobalSettings
+
+@llm_function
+def send_message(message:str, addressee:str=None, message_type:str="email"):
+    """ Use this if user asks to send some message
+
+    Args:
+        message (str): message text to send
+        addressee (str): email of the adressese... in format firstName.lastName@company.com
+        message_type (str, optional): enum: ["email"|"whatsapp"]
+    """
+
+    if message_type=="email":
+        send_email(addressee, message)
+    elif message_type=="whatsapp":
+        send_whatsapp(addressee, message)
+        
+
+# load some other tools from langchain
+list_of_other_tools = load_tools(
+    tool_names=[...], 
+    llm=GlobalSettings.get_current_settings().default_llm)
+
+@llm_prompt
+def do_what_user_asks_for(user_input:str, functions:List[Union[Callable,BaseTool]]):
+    """ 
+    ``` <prompt:system>
+    Your role is to be a helpfull asistant.
+    ```
+    ``` <prompt:user>
+    {user_input}
+    ```
+    """
+
+user_input="Yo, send an email to John Smith that I will be late for the meeting"
+result = do_what_user_asks_for(
+        user_input=user_input, 
+        functions=[send_message, *list_of_other_tools]
+    )
+
+if result.is_function_call:
+    result.execute()
+else:
+    print(result.output_text)
+
+```
+
+
+If you use functions argument, the output will be always `OutputWithFunctionCall`
 
 ``` python
 class OutputWithFunctionCall(BaseModel):
@@ -330,17 +284,133 @@ class OutputWithFunctionCall(BaseModel):
         ...
 ```
 
+If you want to see how to schema has been build, you can use `get_function_schema` method that is added to the function by the decorator:
+```python
+@llm_function
+def my_func(arg1:str):
+    ...
 
-And here is how to use it:
+print(my_func.get_function_schema())
+
+```
+
+
+# Defining other parameters
+Here we are just marking a function as a prompt with `llm_prompt` decorator, turning it effectively into a LLMChain. Instead of running it 
+
+
+Standard LLMchain takes much more init parameter than just inputs_variables and prompt... here is this implementation detail hidden in the decorator.
+Here is how it works:
+
+1. Using **Global settings**:
+
+``` python
+# define global settings for all prompty (if not set - chatGPT is the current default)
+from langchain_decorators import GlobalSettings
+
+GlobalSettings.define_settings(
+    default_llm=ChatOpenAI(temperature=0.0), this is default... can change it here globally
+    default_streaming_llm=ChatOpenAI(temperature=0.0,streaming=True), this is default... can change it here for all ... will be used for streaming
+)
+```
+
+2. Using predefined **prompt types**
+
+``` python
+#You can change the default prompt types
+from langchain_decorators import PromptTypes, PromptTypeSettings
+
+PromptTypes.AGENT_REASONING.llm = ChatOpenAI()
+
+# Or you can just define your own ones:
+class MyCustomPromptTypes(PromptTypes):
+    GPT4=PromptTypeSettings(llm=ChatOpenAI(model="gpt-4"))
+
+@llm_prompt(prompt_type=MyCustomPromptTypes.GPT4) 
+def write_a_complicated_code(app_idea:str)->str:
+    ...
+
+```
+
+3.  Define the settings **directly in the decorator**
+
+``` python
+from langchain.llms import OpenAI
+
+@llm_prompt(
+    llm=OpenAI(temperature=0.7),
+    stop_tokens=["\nObservation"],
+    ...
+    )
+def creative_writer(book_title:str)->str:
+    ...
+```
+
+## Passing a memory and/or callbacks:
+
+To pass any of these, just declare them in the function (or use kwargs to pass anything)
 
 ```python
 
-output = llm_prompt(**inputs, functions[*list_of_functions])
-if output.is_function_call:
-    tool_output = output.execute()
-else:
-    text_response = output.output_text
+@llm_prompt()
+async def write_me_short_post(topic:str, platform:str="twitter", memory:SimpleMemory = None):
+    """
+    {history_key}
+    Write me a short header for my post about {topic} for {platform} platform. 
+    It should be for {audience} audience.
+    (Max 15 words)
+    """
+    pass
 
+await write_me_short_post(topic="old movies")
+
+```
+
+# Simplified streaming
+
+If we wan't to leverage streaming:
+ - we need to define prompt as async function 
+ - turn on the streaming on the decorator, or we can define PromptType with streaming on
+ - capture the stream using StreamingContext
+
+This way we just mark which prompt should be streamed, not needing to tinker with what LLM should we use, passing around the creating and distribute streaming handler into particular part of our chain... just turn the streaming on/off on prompt/prompt type...
+
+The streaming will happen only if we call it in streaming context ... there we can define a simple function to handle the stream
+
+``` python
+# this code example is complete and should run as it is
+
+from langchain_decorators import StreamingContext, llm_prompt
+
+# this will mark the prompt for streaming (useful if we want stream just some prompts in our app... but don't want to pass distribute the callback handlers)
+# note that only async functions can be streamed (will get an error if it's not)
+@llm_prompt(capture_stream=True) 
+async def write_me_short_post(topic:str, platform:str="twitter", audience:str = "developers"):
+    """
+    Write me a short header for my post about {topic} for {platform} platform. 
+    It should be for {audience} audience.
+    (Max 15 words)
+    """
+    pass
+
+
+
+# just an arbitrary  function to demonstrate the streaming... wil be some websockets code in the real world
+tokens=[]
+def capture_stream_func(new_token:str):
+    tokens.append(new_token)
+
+# if we want to capture the stream, we need to wrap the execution into StreamingContext... 
+# this will allow us to capture the stream even if the prompt call is hidden inside higher level method
+# only the prompts marked with capture_stream will be captured here
+with StreamingContext(stream_to_stdout=True, callback=capture_stream_func):
+    result = await run_prompt()
+    print("Stream finished ... we can distinguish tokens thanks to alternating colors")
+
+
+print("\nWe've captured",len(tokens),"tokens🎉\n")
+print("Here is the result:")
+print(result)
 ```
 
 
