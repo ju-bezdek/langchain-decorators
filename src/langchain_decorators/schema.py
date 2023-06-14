@@ -25,7 +25,7 @@ class OutputWithFunctionCall(BaseModel):
         return bool(self.function)
 
     async def execute_async(self):
-        """Executes the function asyncronously."""
+        """Executes the function asynchronously."""
         if not (self.function or self.function_async):
             raise ValueError("No function to execute")
         if self.function_async:
@@ -38,7 +38,7 @@ class OutputWithFunctionCall(BaseModel):
             return self.function(**self.function_arguments)
         
     def execute(self):
-        """ Executes the function syncronously. 
+        """ Executes the function synchronously. 
         If the function is async, it will be executed in a event loop.
         """
         if not (self.function or self.function_async):

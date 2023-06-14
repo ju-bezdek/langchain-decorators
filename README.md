@@ -286,10 +286,68 @@ def write_name_suggestions(company_business:str, count:int)->list:
 write_name_suggestions(company_business="sells cookies", count=5)
 ```
 
+## LLM functions
+- currently supported only for the latest OpenAI chat models
+
+- all you need to do is annotate your function with @llm_function decorator. 
+- This will parse the description for LLM (first coherent paragraph is considered as function description) 
+- and aso parameter descriptions (Google, Numpy and Spihnx notations are supported for now)
+
+Then you pass these functions as arguments to and  @llm_prompt (the argument must be named `functions` ‼️)
+It you can pass any @llm_function there or a native LangChain tool 
+
+The output will be always `OutputWithFunctionCall`
+
+``` python
+class OutputWithFunctionCall(BaseModel):
+    output_text:str
+    output:T
+    function_name:str =None
+    function_arguments:Union[Dict[str,Any],str,None]
+    function:Callable = None
+    function_async:Callable = None
+    
+    @property
+    def is_function_call(self):
+        ...
+    
+    @property
+    def support_async(self):
+        ...
+    
+    @property
+    def support_sync(self):
+        ...
+
+    async def execute_async(self):
+       """Executes the function asynchronously."""
+       ...
+        
+    def execute(self):
+        """ Executes the function synchronously. 
+        If the function is async, it will be executed in a event loop.
+        """
+        ...
+```
+
+
+And here is how to use it:
+
+```python
+
+output = llm_prompt(**inputs, functions[*list_of_functions])
+if output.is_function_call:
+    tool_output = output.execute()
+else:
+    text_response = output.output_text
+
+```
+
+
 ## More complex structures
 
 for dict / pydantic you need to specify the formatting instructions... 
-this can be tedious, that's why you can let the output parser gegnerate you the instructions based on the model (pydantic)
+this can be tedious, that's why you can let the output parser generate you the instructions based on the model (pydantic)
 
 ``` python
 from langchain_decorators import llm_prompt
