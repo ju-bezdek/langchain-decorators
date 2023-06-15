@@ -102,9 +102,9 @@ class LLMChainWithFunctionSupport(LLMChain):
             chat_model:BaseChatModel=self.llm
             if len(prompts)!=1:
                 raise ValueError("Only one prompt is supported when using functions")
-            messages = prompts[0].to_messages()
+            messages = [prompt.to_messages() for prompt in prompts]
              
-            return  chat_model.agenerate(messages=messages, 
+            return  await chat_model.agenerate(messages=messages, 
                                          stop=stop, callbacks=run_manager.get_child() if run_manager else None,
                                          functions=self.function_schemas)
         else:
