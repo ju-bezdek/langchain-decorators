@@ -23,3 +23,9 @@
 ## Version 0.0.6 (2023-06-15)
 - fix some issues with async prompts
 
+## Version 0.0.7 (2023-06-15)
+- fixed streaming capture
+- better handling for missing docs for llm_function
+
+
+
