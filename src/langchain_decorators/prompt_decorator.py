@@ -296,7 +296,7 @@ def llm_prompt(
                 try:
                     
                     result_data = await llmChain.acall(**chain_args)
-                    result = llmChain[llmChain.output_key]
+                    result = result_data[llmChain.output_key]
                     is_function_call = result_data.get("function_call_info")
                     result = process_results(llmChain, result_data, result,is_function_call)
                     
