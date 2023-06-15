@@ -160,6 +160,18 @@ def llm_prompt(
             elif len(args)>1:
                 raise Exception(f"Positional arguments are not supported for prompt functions. Only one positional argument as an object with attributes as a source of inputs is supported. Got: {args}")
             
+            
+            prompt_template = PromptDecoratorTemplate.from_func(func, 
+                                                            template_format=template_format, 
+                                                            output_parser=output_parser, 
+                                                            format_instructions_parameter_key=format_instructions_parameter_key,
+                                                            template_name=template_name,
+                                                            template_version=template_version,
+                                                            prompt_type=prompt_type,
+                                                            )
+            if prompt_template.default_values:
+                kwargs = {**prompt_template.default_values, **kwargs}
+
             if "callbacks" in kwargs:
                 callbacks=kwargs.pop("callbacks")
             else:
@@ -178,20 +190,7 @@ def llm_prompt(
                 functions=kwargs.pop("functions")
             else:
                 functions=None
-
-
-
-            prompt_template = PromptDecoratorTemplate.from_func(func, 
-                                                            template_format=template_format, 
-                                                            output_parser=output_parser, 
-                                                            format_instructions_parameter_key=format_instructions_parameter_key,
-                                                            template_name=template_name,
-                                                            template_version=template_version,
-                                                            prompt_type=prompt_type,
-                                                            )
-            if prompt_template.default_values:
-                kwargs = {**prompt_template.default_values, **kwargs}
-
+                
             if functions:
                 llmChain = LLMChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions)
             else:
@@ -199,7 +198,7 @@ def llm_prompt(
             other_supported_kwargs={"stop","callbacks"}
             unexpected_inputs = [key for key in kwargs if key not in prompt_template.input_variables and key not in other_supported_kwargs ]
             if unexpected_inputs:
-                raise TypeError(f"Unexpected inputs for prompt function {full_name}: {unexpected_inputs}. \nValid inputs are: {prompt_template.input_variables}")
+                raise TypeError(f"Unexpected inputs for prompt function {full_name}: {unexpected_inputs}. \nValid inputs are: {prompt_template.input_variables}\nHint: Make sure that you've used all the inputs in the template")
             
             missing_inputs = [key for key in prompt_template.input_variables if key not in kwargs ]
             if format_instructions_parameter_key in missing_inputs:
