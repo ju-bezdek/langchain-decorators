@@ -20,3 +20,6 @@
 ## Version 0.0.5 (2023-06-14)
 - support for openAI functions 🚀 
 
+## Version 0.0.6 (2023-06-15)
+- fix some issues with async prompts
+
