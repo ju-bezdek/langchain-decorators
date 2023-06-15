@@ -150,7 +150,9 @@ def get_func_return_type(func: callable)->Tuple:
             
             
 def get_function_docs(func: callable)->Tuple:
-    fist_line, rest = func.__doc__.split('\n', 1)
+    if not func.__doc__:
+        return None
+    fist_line, rest = func.__doc__.split('\n', 1) if '\n' in func.__doc__ else (func.__doc__, "")
     # we dedent the first line separately,because its common that it often starts right after """
     fist_line = fist_line.strip()
     if fist_line:

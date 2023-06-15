@@ -148,33 +148,34 @@ def build_func_description(func:Callable, format:Union[DocstringsFormat,str]="au
                 "required":args_schema["required"]
             }
     
-    if not args_schema and func_docs:
+    if not args_schema:
         # any other case, that function arguments are not wrapped in pydantic model
-        docsctrings_param_description = find_and_parse_params_from_docstrings(func_docs,format=format)
-        if docsctrings_param_description:
-            if validate_docstrings:
-                documented_params=set(docsctrings_param_description.keys()) 
-                implemented_params= set(arguments_fields.keys())
-                not_implemented = documented_params - implemented_params  # Set difference: keys in set1 but not in set2
-                not_documented = implemented_params - documented_params  # Set difference: keys in set2 but not in set1
+        if func_docs:
+            docsctrings_param_description = find_and_parse_params_from_docstrings(func_docs,format=format)
+            if docsctrings_param_description:
+                if validate_docstrings:
+                    documented_params=set(docsctrings_param_description.keys()) 
+                    implemented_params= set(arguments_fields.keys())
+                    not_implemented = documented_params - implemented_params  # Set difference: keys in set1 but not in set2
+                    not_documented = implemented_params - documented_params  # Set difference: keys in set2 but not in set1
 
-                if not_implemented or not_documented:
-                    errs = []
-                    if not_implemented:
-                        errs.append(f"Missing (not implemented): {not_implemented}")
-                    if not_documented:
-                        errs.append(f"Missing (not documented): {not_documented}")
-                     
-                    raise ValueError("Docstrings parameters do not match function signature. "+errs.join(", "))
-            
-            for arg_name, arg_model_field in arguments_fields.items():
-                arg_docs = docsctrings_param_description.get(arg_name)
-                if arg_docs:
-                    
-                    arg_model_field.field_info.description =arg_docs["description"]
-                    enum = parse_enum_from_docstring_param(arg_docs["type"],arg_docs["description"])
-                    if enum:
-                        arg_model_field.field_info.extra["enum"] = enum
+                    if not_implemented or not_documented:
+                        errs = []
+                        if not_implemented:
+                            errs.append(f"Missing (not implemented): {not_implemented}")
+                        if not_documented:
+                            errs.append(f"Missing (not documented): {not_documented}")
+                        
+                        raise ValueError("Docstrings parameters do not match function signature. "+errs.join(", "))
+                
+                for arg_name, arg_model_field in arguments_fields.items():
+                    arg_docs = docsctrings_param_description.get(arg_name)
+                    if arg_docs:
+                        
+                        arg_model_field.field_info.description =arg_docs["description"]
+                        enum = parse_enum_from_docstring_param(arg_docs["type"],arg_docs["description"])
+                        if enum:
+                            arg_model_field.field_info.extra["enum"] = enum
 
         args_schema={
             "type":"object",
@@ -200,9 +201,12 @@ def build_func_description(func:Callable, format:Union[DocstringsFormat,str]="au
         return schema
     args_schema["properties"] = {prop:pop_prop_title(prop_schema) for prop, prop_schema in args_schema["properties"].items()}
     
+    description = parse_function_description_from_docstrings(func_docs) if func_docs else None
+    if not description:
+        raise ValueError(f"LLM Function {func_name} has no description in docstrings")
     return {
         "name":func_name,
-        "description":parse_function_description_from_docstrings(func_docs),
+        "description":description,
         "parameters":args_schema
     }
             
