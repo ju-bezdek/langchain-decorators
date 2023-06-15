@@ -1,4 +1,6 @@
 
+from calendar import c
+from gc import callbacks
 import logging
 import inspect
 
@@ -114,23 +116,25 @@ def llm_prompt(
             _capture_stream = prompt_type.capture_stream if capture_stream is None else capture_stream
         else:
             _capture_stream = capture_stream
-        if _capture_stream:
-
-            if not is_async:
-                print_log(f"Warning: capture_stream=True is only supported for async functions. Ignoring capture_stream for {full_name}", logging.WARNING, LogColors.YELLOW)
-                _capture_stream=False
-            else:
-                if not StreamingContext.get_context():
-                    print_log(f"Debug: Not inside StreamingContext. Ignoring capture_stream for {full_name}", logging.DEBUG, LogColors.DARK_GRAY)
-                    _capture_stream=False
+        if _capture_stream and not is_async:
+            print_log(f"Warning: capture_stream=True is only supported for async functions. Ignoring capture_stream for {full_name}", logging.WARNING, LogColors.YELLOW)
+            _capture_stream=False
+            
+                
                 
        
 
         def prepare_call_args(*args, **kwargs):
             global_settings = GlobalSettings.get_current_settings()
+
+            if not StreamingContext.get_context():
+                print_log(f"INFO: Not inside StreamingContext. Ignoring capture_stream for {full_name}", logging.DEBUG, LogColors.WHITE)
+                capture_stream=False
+            else:
+                capture_stream=_capture_stream
            
             if not llm:
-                if _capture_stream:
+                if capture_stream:
                     if not global_settings.default_streaming_llm:
                         print_log(f"Warning: capture_stream on {name} is on, but the default LLM {llm} doesn't seem to be supporting streaming.", logging.WARNING, LogColors.YELLOW)
                         
@@ -139,7 +143,7 @@ def llm_prompt(
                     prompt_llm = global_settings.default_llm
             else:
                 prompt_llm=llm
-                if _capture_stream:
+                if capture_stream:
                     if  hasattr(llm,"streaming"):
                         if not getattr(llm, "streaming"):
                             print_log(f"Warning: capture_stream on {name} is on, but the provided LLM {llm} doesn't have streaming on! Stream wont be captured", logging.WARNING, LogColors.YELLOW)
@@ -156,11 +160,14 @@ def llm_prompt(
             elif len(args)>1:
                 raise Exception(f"Positional arguments are not supported for prompt functions. Only one positional argument as an object with attributes as a source of inputs is supported. Got: {args}")
             
-            if _capture_stream:
-                if "callbacks" in kwargs:
-                    kwargs["callbacks"].append(StreamingContext.StreamingContextCallback())
-                else:
-                    kwargs["callbacks"] = [StreamingContext.StreamingContextCallback()]
+            if "callbacks" in kwargs:
+                callbacks=kwargs.pop("callbacks")
+            else:
+                callbacks=[]
+            
+            if capture_stream:
+                callbacks.append(StreamingContext.StreamingContextCallback())
+            
 
             if "memory" in kwargs:
                 memory = kwargs.pop("memory")
@@ -216,10 +223,10 @@ def llm_prompt(
                 else:
                     raise TypeError(f"{full_name}: missing 1 required keyword-only argument: {missing_inputs}")
                 
-
+            
             if stop_tokens:
                 kwargs["stop"]=stop_tokens
-            call_args = {"inputs":kwargs, "return_only_outputs":True}
+            call_args = {"inputs":kwargs, "return_only_outputs":True, "callbacks":callbacks}
             return llmChain, call_args
         
         def get_retry_parse_call_args(prompt_template:PromptDecoratorTemplate, exception:OutputParserExceptionWithOriginal, get_original_prompt:Callable):
@@ -292,7 +299,7 @@ def llm_prompt(
                 
                 print_log(log_object=f"> Entering {name} prompt decorator chain", log_level=prompt_type.log_level if prompt_type else logging.DEBUG,color=LogColors.WHITE_BOLD)
                 llmChain, chain_args = prepare_call_args(*args, **kwargs)
-
+                
                 try:
                     
                     result_data = await llmChain.acall(**chain_args)

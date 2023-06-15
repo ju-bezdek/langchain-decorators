@@ -27,7 +27,7 @@ class StreamingContext():
 
     @classmethod
     def get_context(cls) -> 'StreamingContext':
-        return cls.context_var.get("streaming_context")
+        return cls.context_var.get(None)
 
     def on_new_token(self, token: str):
         if self.callback:
