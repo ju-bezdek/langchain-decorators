@@ -4,12 +4,12 @@ import logging
 from textwrap import dedent
 import yaml
 from enum import Enum
-from typing import Any, Coroutine, Dict, Union, Optional
+from typing import Any, Coroutine, Dict, Union, Optional, get_origin
 from pydantic import BaseConfig, BaseModel, Extra
 from pydantic.fields import ModelField
 from langchain.llms.base import BaseLanguageModel
 from langchain.chat_models import ChatOpenAI
-
+from typing_inspect import is_generic_type, is_union_type
 
 class GlobalSettings(BaseModel):
     default_llm: Optional[BaseLanguageModel] = None
@@ -124,14 +124,30 @@ class PromptTypes:
 def get_func_return_type(func: callable)->Tuple:
     return_type = func.__annotations__.get("return",None)
     if inspect.iscoroutinefunction(func):
-        if return_type and issubclass(return_type, Coroutine):
-            return_type_args = getattr(return_type, '__args__', None)
-            if return_type_args and len(return_type_args) == 3:
-                return_type = return_type_args[2]
+        if return_type:
+            if is_generic_type(return_type):
+                return_type_origin = get_origin(return_type)
+                if issubclass(return_type_origin, Coroutine):
+                    return_type_args = getattr(return_type, '__args__', None)
+                    if return_type_args and len(return_type_args) == 3:
+                        return return_type_args[2]
+                    else:
+                        raise Exception(f"Invalid Coroutine annotation {return_type}. Expected Coroutine[ any , any, <return_type>] or just <return_type>")
+                else:
+                    return return_type_origin
+            elif is_union_type(return_type):
+                return_type_args = getattr(return_type, '__args__', None)
+                if return_type_args and len(return_type_args) == 2 and return_type_args[1] == type(None):
+                    return return_type_args[0]
+                else:
+                    raise Exception(f"Invalid Union annotation {return_type}. Expected Union[ <return_type>, None] or just <return_type>")
             else:
-                raise Exception(f"Invalid Coroutine annotation {return_type}. Expected Coroutine[ any , any, <return_type>] or just <return_type>")
-        else:
-            return return_type
+                
+                if issubclass(return_type, Coroutine):
+                    return None
+                else:
+                    return return_type
+            
             
 def get_function_docs(func: callable)->Tuple:
     fist_line, rest = func.__doc__.split('\n', 1)
