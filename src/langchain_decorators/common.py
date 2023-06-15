@@ -130,6 +130,8 @@ def get_func_return_type(func: callable)->Tuple:
                 return_type = return_type_args[2]
             else:
                 raise Exception(f"Invalid Coroutine annotation {return_type}. Expected Coroutine[ any , any, <return_type>] or just <return_type>")
+        else:
+            return return_type
             
 def get_function_docs(func: callable)->Tuple:
     fist_line, rest = func.__doc__.split('\n', 1)
