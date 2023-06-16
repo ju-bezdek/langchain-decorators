@@ -65,6 +65,23 @@ class LLMChainWithFunctionSupport(LLMChain):
         return values
     
 
+    def preprocess_inputs(self, input_list):
+        additional_kwargs={}
+        if "function_call" in input_list[0]:
+            for input in input_list:
+                function_call=input.pop("function_call")
+            # function call should be only one... and the same for all inputs... there shouldn't be more anyway
+            if not isinstance(function_call,str):
+                #find the index of the function in self.functions
+                function_index = self.functions.index(function_call)
+                if function_index == -1:
+                    raise ValueError(f"Invalid function call. Function {function_call} is not defined in this chain")
+                function_call = {"name": self.function_schemas[function_index]["name"]}
+            elif function_call in ["none","auto"]:
+                function_call = {"name": function_call}
+
+            additional_kwargs["function_call"]=function_call 
+        return additional_kwargs
 
 
 
@@ -74,15 +91,21 @@ class LLMChainWithFunctionSupport(LLMChain):
         run_manager: Optional[CallbackManagerForChainRun] = None,
     ) -> LLMResult:
         """Generate LLM result from inputs."""
+        
+        additional_kwargs = self.preprocess_inputs(input_list)
+           
         prompts, stop = self.prep_prompts(input_list, run_manager=run_manager)
         if self.functions:
+            
             chat_model:BaseChatModel=self.llm
           
             messages = [prompt.to_messages() for prompt in prompts]
              
             result =  chat_model.generate(messages=messages, 
                                         stop=stop, callbacks=run_manager.get_child() if run_manager else None,
-                                        functions=self.function_schemas)
+                                        functions=self.function_schemas,
+                                        **additional_kwargs
+                                        )
             return result
         else:
             return self.llm.generate_prompt(
@@ -95,9 +118,9 @@ class LLMChainWithFunctionSupport(LLMChain):
         run_manager: Optional[AsyncCallbackManagerForChainRun] = None,
     ) -> LLMResult:
         """Generate LLM result from inputs."""
-        prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
-        
+        additional_kwargs = self.preprocess_inputs(input_list)
     
+        prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
         if self.functions:
             chat_model:BaseChatModel=self.llm
             if len(prompts)!=1:
@@ -106,7 +129,9 @@ class LLMChainWithFunctionSupport(LLMChain):
              
             return  await chat_model.agenerate(messages=messages, 
                                          stop=stop, callbacks=run_manager.get_child() if run_manager else None,
-                                         functions=self.function_schemas)
+                                         functions=self.function_schemas,
+                                         **additional_kwargs
+                                         )
         else:
             return await self.llm.agenerate_prompt(
                 prompts, stop, callbacks=run_manager.get_child() if run_manager else None
