@@ -131,7 +131,7 @@ def get_func_return_type(func: callable)->Tuple:
         if return_type:
             if is_generic_type(return_type):
                 return_type_origin = get_origin(return_type)
-                if issubclass(return_type_origin, Coroutine):
+                if return_type_origin and issubclass(return_type_origin, Coroutine):
                     return_type_args = getattr(return_type, '__args__', None)
                     if return_type_args and len(return_type_args) == 3:
                         return_type = return_type_args[2]
