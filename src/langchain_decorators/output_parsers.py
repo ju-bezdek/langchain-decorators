@@ -1,6 +1,6 @@
 import datetime
 import logging
-from textwrap import dedent, indent
+from textwrap import dedent
 from typing import Dict, List, Type, TypeVar, Union
 from langchain.output_parsers import PydanticOutputParser
 from langchain.schema import BaseOutputParser, OutputParserException
@@ -10,10 +10,9 @@ import json
 import yaml
 from pydantic import BaseModel, ValidationError
 from pydantic.fields import ModelField
-
 from .function_decorator import llm_function
 from .pydantic_helpers import *
-from .schema import OutputWithFunctionCall
+
 
 class OutputParserExceptionWithOriginal(OutputParserException):
     """Exception raised when an output parser fails to parse the output of an LLM call."""
