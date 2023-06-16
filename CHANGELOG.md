@@ -27,5 +27,9 @@
 - fixed streaming capture
 - better handling for missing docs for llm_function
 
-
+## Version 0.0.7 (2023-06-16)
+- support for parsing via OpenAI functions 🚀
+- support for controlling function_call
+- add BIG_CONTEXT prompt type
+- ton of bugfixes
 
