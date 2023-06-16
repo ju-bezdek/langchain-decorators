@@ -1,12 +1,14 @@
-from functools import wraps
+import re
 import inspect
-from textwrap import dedent
-from typing import Callable, Dict, Union, Type
+from enum import Enum
+from functools import wraps
+from typing import Callable,  Union, Type
 from pydantic import BaseModel
 from pydantic.fields import ModelField
-import re
-from enum import Enum
+from pydantic.schema import  field_schema
+import copy
 
+from .pydantic_helpers import sanitize_pydantic_schema
 from .common import  get_arguments_as_pydantic_fields, get_function_docs, get_function_full_name
 
 class DocstringsFormat(Enum):
@@ -15,87 +17,109 @@ class DocstringsFormat(Enum):
     SPHINX = "sphinx"
     NUMPY = "numpy"
 
+def get_function_schema(func):
+    if callable(func) and hasattr(func,"get_function_schema"):
+        return func.get_function_schema(func)
+    else:
+        return None
+
 
 def llm_function(
-       argument_schema:Union[str, Type[BaseModel], dict]="auto",
-       validate_docstrings:bool=True,
-       docstring_format:str="auto",
+        function_name:str=None,
+        argument_schema:Union[str, Type[BaseModel], dict]="auto",
+        validate_docstrings:bool=True,
+        docstring_format:str="auto",
         ):
     """
     Decorator for functions that take a language model as first argument.
 
-     - argument_schema
-        - `auto` (default): the schema is automatically inferred from the function signature. If docstrings are provided, they will be used to enhance function description
-        - `pydantic` -  expects a pydantic model as first and only argument ('self' being ignored) - allows for controllable schema
-        - `docstring` - parses the schema ONLY from the docstring
 
-        or define pydantic model:
-        ```
-        @llm_function(argument_schema=MyFunctionPydanticArgsSchema)
-        def my_function(self, question:str)->bool:
-            ...
-        ```
+    Args:
+        - function_name: the name of the function for LLM. If not provided, the name of the function will be used
 
-        or define a simple dict with descriptions:
-        ```
-        @llm_function(argument_schema={"question": "Question to ask"})
-        def my_function(self, question:str)->bool:
-            ...
-        ```
-    - validate_docstrings: if True, the docstrings will be parsed and validated against function. If parsing or validation fails, an error will be raised
+        - argument_schema
+            - `auto` (default): the schema is automatically inferred from the function signature. If docstrings are provided, they will be used to enhance function description
+            - `pydantic` -  expects a pydantic model as first and only argument ('self' being ignored) - allows for controllable schema
+            - `docstring` - parses the schema ONLY from the docstring
 
-    - docstring_format: the format of the docstring
-        -  `auto` (default): the format is automatically inferred from the docstring
-        -  `google`: the docstring is parsed as markdown (see [Google docstring format](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html))
-        -  `numpy`: the docstring is parsed as markdown (see [Numpy docstring format](https://numpydoc.readthedocs.io/en/latest/format.html))
-        -  `sphinx`: the docstring is parsed as sphinx format (see [Sphinx docstring format](https://sphinx-rtd-tutorial.readthedocs.io/en/latest/docstrings.html))
+            or define pydantic model:
+            ```
+            @llm_function(argument_schema=MyFunctionPydanticArgsSchema)
+            def my_function(self, question:str)->bool:
+                ...
+            ```
+
+            or define a simple dict with descriptions:
+            ```
+            @llm_function(argument_schema={"question": "Question to ask"})
+            def my_function(self, question:str)->bool:
+                ...
+            ```
+
+        - validate_docstrings: if True, the docstrings will be parsed and validated against function. If parsing or validation fails, an error will be raised
+
+        - docstring_format: the format of the docstring
+            -  `auto` (default): the format is automatically inferred from the docstring
+            -  `google`: the docstring is parsed as markdown (see [Google docstring format](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html))
+            -  `numpy`: the docstring is parsed as markdown (see [Numpy docstring format](https://numpydoc.readthedocs.io/en/latest/format.html))
+            -  `sphinx`: the docstring is parsed as sphinx format (see [Sphinx docstring format](https://sphinx-rtd-tutorial.readthedocs.io/en/latest/docstrings.html))
 
     Examples:
-    Google style docstrings:
-    ```python
-    @llm_function
-    def function_with_google_docstrings(self, question:str)->bool:
-        \"\"\"
-        This is a function with google docstrings
-        Args:  # but accepts also Parameters, Arguments
-            question (str): Question to ask
-        \"\"\"
-    ```
+    
+        Google style docstrings:
+        ```python
+        @llm_function
+        def function_with_google_docstrings(self, question:str)->bool:
+            \"\"\"
+            This is a function with google docstrings
+            Args:  # but accepts also Parameters, Arguments
+                question (str): Question to ask
+            \"\"\"
+        ```
 
-    ```python
-    @llm_function
-    def function_with_numpy_docstrings(self, question:str)->bool:
-        \"\"\"
-        This is a function with google docstrings
-        Parameters # but accepts also Args, Arguments
-        ----------
-            question :int
-                Question to ask
-            
-        \"\"\"
-    ```
+        ```python
+        @llm_function
+        def function_with_numpy_docstrings(self, question:str)->bool:
+            \"\"\"
+            This is a function with google docstrings
+            Parameters # but accepts also Args, Arguments
+            ----------
+                question :int
+                    Question to ask
+                
+            \"\"\"
+        ```
 
-    ```python
-    @llm_function
-    def function_with_sphinx_docstrings(self, question:str)->bool:
-        \"\"\"
-        This is a function with google docstrings
-        :param question: Question to ask
-            
-        \"\"\"
-    ```
+        ```python
+        @llm_function
+        def function_with_sphinx_docstrings(self, question:str)->bool:
+            \"\"\"
+            This is a function with google docstrings
+            :param question: Question to ask
+                
+            \"\"\"
+        ```
 
-    Note: The fact whether the parameter is optional is inferred from the function signature. You can also document it, but it will be just part of the description. If typing annotations are used (i.e. Optional[str]), this will be stripped to native type.
+    Note: 
+        The fact whether the parameter is optional is inferred from the function signature. You can also document it, but it will be just part of the description. If typing annotations are used (i.e. Optional[str]), this will be stripped to native type.
     
     """
     
-    if callable(argument_schema):
+    if callable(function_name):
         # this is the case when the decorator is called without arguments
         # we initialize params with default values
-        func = argument_schema
-        argument_schema = "auto"
+        func = function_name
+        function_name=None
     else:
         func = None
+
+
+    def get_function_schema(_func, _validate_docstrings=validate_docstrings):
+            return build_func_schema(_func, 
+                                            function_name = function_name, 
+                                            format=docstring_format, 
+                                            validate_docstrings=_validate_docstrings
+                                          )
     
     def decorator(func):
         
@@ -110,8 +134,11 @@ def llm_function(
             @wraps(func)
             async def func_wrapper(*args, **kwargs):
                 return await func(*args, **kwargs)
-        def get_function_schema(_validate_docstrings=validate_docstrings):
-            return build_func_description(func, format=docstring_format, validate_docstrings=_validate_docstrings)
+        
+        
+        
+       
+
         func_wrapper.get_function_schema=get_function_schema
         return func_wrapper
     
@@ -121,27 +148,50 @@ def llm_function(
         return decorator
     
 
+class LllFunctionWithModifiedSchema:
+    def __init__(self, func, modified_schema:dict):
+        self.func = func
+        self._function_schema = modified_schema
+
+
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+    def get_function_schema(self):
+        return self._function_schema
+        
+         
 
 
 
-from pydantic.schema import get_field_info_schema, field_schema
-def build_func_description(func:Callable, format:Union[DocstringsFormat,str]="auto", validate_docstrings:bool=True):
+def build_func_schema(
+        func:Callable, 
+        function_name:str=None, 
+        format:Union[DocstringsFormat,str]="auto", 
+        validate_docstrings:bool=True
+        ):
     
     if isinstance(format,str):
         format = DocstringsFormat(format)
 
     func_docs = get_function_docs(func)  
-    func_name= get_function_full_name(func)
-    
 
+    if function_name and not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", function_name):
+        raise ValueError(f"Invalid function name: {function_name} for {get_function_full_name(func)}. Only letters, numbers and underscores are allowed. The name must start with a letter or an underscore.")
+   
+    func_name =  function_name or func.__name__
     arguments_fields = get_arguments_as_pydantic_fields(func)
     
     args_schema = None
     if len(arguments_fields)==1:
         first_param:ModelField = list(arguments_fields.values())[0]
-        if first_param.required == True and issubclass(first_param.type_, BaseModel):
+            
+        if first_param.type_==first_param.outer_type_ and first_param.required == True and issubclass(first_param.type_, BaseModel):
+            if first_param.type_==BaseModel:
+                raise ValueError(f"Invalid argument type for {get_function_full_name(func)}. The argument type cannot be pydantic BaseModel. Please use a subclass of BaseModel.")
             # the one and only argument is a pydantic model
             args_schema =  first_param.type_.schema()
+            sanitize_pydantic_schema(args_schema)
             args_schema={
                 "type":"object",
                 "properties":args_schema["properties"],
@@ -202,8 +252,9 @@ def build_func_description(func:Callable, format:Union[DocstringsFormat,str]="au
     args_schema["properties"] = {prop:pop_prop_title(prop_schema) for prop, prop_schema in args_schema["properties"].items()}
     
     description = parse_function_description_from_docstrings(func_docs) if func_docs else None
+
     if not description:
-        raise ValueError(f"LLM Function {func_name} has no description in docstrings")
+        raise ValueError(f"LLM Function {get_function_full_name(func)} has no description in docstrings")
     return {
         "name":func_name,
         "description":description,
