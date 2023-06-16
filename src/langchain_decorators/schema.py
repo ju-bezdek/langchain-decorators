@@ -1,16 +1,22 @@
 import asyncio
-from typing import Any, Callable, Dict, Optional, TypeVar, Union
+import re
+from typing import Any, Callable, Dict, Generic, Optional, TypeVar, Union
 from pydantic import BaseModel
+from langchain.schema import FunctionMessage
+import json
+
+from regex import F
 
 T = TypeVar("T")
 
-class OutputWithFunctionCall(BaseModel):
+class OutputWithFunctionCall(Generic[T],BaseModel):
     output_text:str
     output:T
     function_name:str =None
     function_arguments:Union[Dict[str,Any],str,None]
     function:Callable = None
     function_async:Callable = None
+    result: Any = None
     
     @property
     def is_function_call(self):
@@ -30,12 +36,13 @@ class OutputWithFunctionCall(BaseModel):
             raise ValueError("No function to execute")
         if self.function_async:
             if isinstance(self.function_arguments, dict):
-                return await self.function_async(**self.function_arguments)
+                result= await self.function_async(**self.function_arguments)
             else:
-                return await self.function_async(self.function_arguments)
+                result= await self.function_async(self.function_arguments)
         else:
             await asyncio.sleep(0)
-            return self.function(**self.function_arguments)
+            result= self.function(**self.function_arguments)
+        return result
         
     def execute(self):
         """ Executes the function synchronously. 
@@ -45,9 +52,9 @@ class OutputWithFunctionCall(BaseModel):
             raise ValueError("No function to execute")
         if self.function:
             if isinstance(self.function_arguments, dict):
-                return self.function(**self.function_arguments)
+                result= self.function(**self.function_arguments)
             else:
-                self.function(self.function_arguments)
+                result=self.function(self.function_arguments)
         
         else:
             try:
@@ -55,8 +62,23 @@ class OutputWithFunctionCall(BaseModel):
             except RuntimeError:
                 current_loop = None
             if current_loop:
-                return current_loop.run_until_complete(self.function_async(**self.function_arguments))
+                result= current_loop.run_until_complete(self.function_async(**self.function_arguments))
             else:
-                return asyncio.run(self.function_async(**self.function_arguments))
+                result= asyncio.run(self.function_async(**self.function_arguments))
+        self.result = result
+        return result
+    
+    def to_function_message(self, result=None):
+        if not result:
+            if not self.result:
+                raise Exception("The function has not been executed yet, or didn't return a result")
+            result = self.result
+
+        if not isinstance(result,str):
+            result = json.dumps(result)
+
+        return FunctionMessage(name=self.function_name, content=result)
+    
+
 
 

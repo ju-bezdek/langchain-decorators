@@ -10,8 +10,10 @@ import json
 import yaml
 from pydantic import BaseModel, ValidationError
 from pydantic.fields import ModelField
-from .pydantic_helpers import *
 
+from .function_decorator import llm_function
+from .pydantic_helpers import *
+from .schema import OutputWithFunctionCall
 
 class OutputParserExceptionWithOriginal(OutputParserException):
     """Exception raised when an output parser fails to parse the output of an LLM call."""
@@ -197,6 +199,37 @@ class PydanticOutputParser(BaseOutputParser[T]):
         else:
 
             return dedent(f"""```json\n{self.get_json_example_description(self.model)}\n```""").strip()
+
+class OpenAIFunctionsPydanticOutputParser(BaseOutputParser[T]):
+    model: Type[T]
+
+    @property
+    def _type(self) -> str:
+        return "opanai_functions_pydantic"
+    
+    def __init__(self, model: Type[T]):
+        super().__init__(model=model)
+
+    def parse(self, function_call_arguments:dict ) -> T:
+        try:
+            return self.model.parse_obj(function_call_arguments)
+        except ValidationError as e:
+            err_msg =humanize_pydantic_validation_error(e)
+            serialized= json.dumps(function_call_arguments)
+            raise OutputParserExceptionWithOriginal(f"Function call arguments are not in correct format: {serialized}Errors: {err_msg}",serialized)
+        
+
+    def get_format_instructions(self) -> str:
+        return "" # will be handled by openai
+    
+    
+    def build_llm_function(self):
+        @llm_function()
+        def generate_response( output:self.model) -> T:
+            """ Use this to transform the data into desired format. """
+            #above is a description for LLM...
+            return output
+        return generate_response
 
 
 class CheckListParser(ListOutputParser):

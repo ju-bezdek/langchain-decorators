@@ -66,4 +66,32 @@ def align_fields_with_model( data:dict, model:Type[BaseModel]) -> dict:
     
 
 def humanize_pydantic_validation_error(validation_error:ValidationError):
-     return "\n".join([ f'{".".join(err.get("loc"))} - {err.get("msg")} ' for err in  validation_error.errors()])
+     return "\n".join([ f'{".".join([str(i) for i in err.get("loc")])} - {err.get("msg")} ' for err in  validation_error.errors()])
+
+
+def sanitize_pydantic_schema(schema:dict):
+    """ Pydantic schema uses '$ref' references to definitions, which doesn't go well with LLMs... les fix that  """
+    if schema.get("definitions"):
+        definitions=schema.pop("definitions")
+        for def_key, definition in definitions.items():
+            if "title" in definition:
+                definition.pop("title") # no need for this
+            nested_ref = next((1 for val in definition.get("properties",{}) if isinstance(val,dict) and val.get("$ref") ),None)
+            if nested_ref:
+                raise Exception(f"Nested $ref not supported! ... probably recursive schema: {def_key}")
+        def replace_refs_recursive(schema:dict):
+            if isinstance(schema,dict):
+                if schema.get("properties"):
+                    for k,v in schema.get("properties").items():
+                        if v.get("$ref"):
+                            schema["properties"][k]=definitions[v["$ref"].split("/")[-1]]
+                        elif v.get("properties"):
+                            replace_refs_recursive(v)
+                        elif v.get("items"):
+                            if isinstance(v["items"],dict):
+                                ref = v["items"].get("$ref")
+                                if  ref:
+                                    v["items"]=definitions[ref.split("/")[-1]]
+
+        replace_refs_recursive(schema)
+    return schema

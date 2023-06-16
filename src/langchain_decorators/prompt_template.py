@@ -17,7 +17,7 @@ from langchain.prompts.chat import  MessagesPlaceholder, ChatMessagePromptTempla
 from langchain.schema import PromptValue, BaseOutputParser
 
 from promptwatch import register_prompt_template
-
+from .schema import OutputWithFunctionCall
 from .common import LogColors, PromptTypeSettings, get_func_return_type, get_function_docs, get_function_full_name, print_log
 from .output_parsers import *
 
@@ -222,6 +222,8 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                 output_parser = "list"
             elif return_type==bool:
                 output_parser = "boolean"
+            elif issubclass(return_type, OutputWithFunctionCall):
+                return_type = "str"
             elif issubclass(return_type,BaseModel):
                 output_parser = PydanticOutputParser(model=return_type)
             else:
@@ -247,6 +249,18 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                     raise Exception(f"You must annotate the return type for pydantic output parser, so that we can infer the model")
                 else:
                     raise Exception(f"Unsupported return type {return_type} for pydantic output parser")
+            elif output_parser=="functions":
+                if not return_type:
+                    raise Exception(f"You must annotate the return type for functions output parser, so that we can infer the model")
+                elif not issubclass(return_type,OutputWithFunctionCall):
+                    if issubclass(return_type,BaseModel):
+                        output_parser = OpenAIFunctionsPydanticOutputParser(model=return_type)
+                    else:
+                        raise Exception(f"Functions output parser only supports return type pydantic models, got {return_type}")
+                else:
+                    output_parser=None
+            else:
+                raise Exception(f"Unsupported output parser {output_parser}")
 
         
         default_values = {k:v.default for k,v in inspect.signature(func).parameters.items() if v.default!=inspect.Parameter.empty}

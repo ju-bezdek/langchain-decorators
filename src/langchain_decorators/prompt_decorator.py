@@ -190,12 +190,17 @@ def llm_prompt(
                 functions=kwargs.pop("functions")
             else:
                 functions=None
+
                 
             if functions:
                 llmChain = LLMChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions)
+            elif isinstance(prompt_template.output_parser, OpenAIFunctionsPydanticOutputParser):
+                function=prompt_template.output_parser.build_llm_function()
+                kwargs["function_call"] = function
+                llmChain = LLMChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=[function])
             else:
                 llmChain = LLMChain(llm=prompt_llm, prompt=prompt_template,  memory=memory)
-            other_supported_kwargs={"stop","callbacks"}
+            other_supported_kwargs={"stop","callbacks","function_call"}
             unexpected_inputs = [key for key in kwargs if key not in prompt_template.input_variables and key not in other_supported_kwargs ]
             if unexpected_inputs:
                 raise TypeError(f"Unexpected inputs for prompt function {full_name}: {unexpected_inputs}. \nValid inputs are: {prompt_template.input_variables}\nHint: Make sure that you've used all the inputs in the template")
@@ -226,7 +231,10 @@ def llm_prompt(
             if stop_tokens:
                 kwargs["stop"]=stop_tokens
             call_args = {"inputs":kwargs, "return_only_outputs":True, "callbacks":callbacks}
+           
             return llmChain, call_args
+        
+        
         
         def get_retry_parse_call_args(prompt_template:PromptDecoratorTemplate, exception:OutputParserExceptionWithOriginal, get_original_prompt:Callable):
             logging.warning(msg=f"Failed to parse output for {full_name}: {exception}\nRetrying...")
@@ -248,9 +256,16 @@ def llm_prompt(
         
         def process_results(llmChain, result_data, result, is_function_call):
             log_results(result_data, result, is_function_call, verbose, prompt_type)
-            if llmChain.prompt.output_parser:
-                if result or not is_function_call:
-                    result = llmChain.prompt.output_parser.parse(result)
+            if llmChain.prompt.output_parser:    
+                if isinstance(llmChain.prompt.output_parser, OpenAIFunctionsPydanticOutputParser):
+                    # there is no result probably, but if there is, we ignore it... we are interested only in tha data in function_call_info
+                    result = llmChain.prompt.output_parser.parse(result_data["function_call_info"]["arguments"])
+                    result_data.pop("function_call_info") # we don't need it anymore, and later in the code we check it its here to create OutputWithFunctionCall
+                    result_data.pop("function")
+
+                else:
+                    if result:
+                        result = llmChain.prompt.output_parser.parse(result)
             return result
 
         if not is_async:
