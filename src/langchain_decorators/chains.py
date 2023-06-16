@@ -12,6 +12,8 @@ from langchain.chat_models.base import BaseChatModel
 from langchain.prompts.chat import  ChatPromptValue
 from langchain.schema import PromptValue, ChatGeneration
 from pydantic import root_validator
+
+from .function_decorator import get_function_schema
 try:
     from langchain.tools.convert_to_openai import format_tool_to_openai_function
 except ImportError:
@@ -47,8 +49,10 @@ class LLMChainWithFunctionSupport(LLMChain):
                 if isinstance(f, BaseTool):
                     function_schemas[i] = format_tool_to_openai_function(f)
                 elif callable(f) and hasattr(f,"get_function_schema"):
-                    if hasattr(f,"get_function_schema"):
-                        function_schemas[i] = f.get_function_schema()
+                    schema = get_function_schema(f)
+                    if not schema:
+                        raise ValueError(f"Invalid item value in functions. Unable to retrieve schema from function {f}")
+                    function_schemas[i] =schema
                 else:
                     raise ValueError(f"Invalid item value in functions. Only Tools or functions decorated with @llm_function are allowed. Got: {f}")
             values["function_schemas"] = function_schemas
@@ -77,7 +81,7 @@ class LLMChainWithFunctionSupport(LLMChain):
                 if function_index == -1:
                     raise ValueError(f"Invalid function call. Function {function_call} is not defined in this chain")
                 function_call = {"name": self.function_schemas[function_index]["name"]}
-            elif function_call in ["none","auto"]:
+            elif function_call not in ["none","auto"]:
                 function_call = {"name": function_call}
 
             additional_kwargs["function_call"]=function_call 
