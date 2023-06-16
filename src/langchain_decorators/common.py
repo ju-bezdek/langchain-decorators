@@ -134,23 +134,26 @@ def get_func_return_type(func: callable)->Tuple:
                 if issubclass(return_type_origin, Coroutine):
                     return_type_args = getattr(return_type, '__args__', None)
                     if return_type_args and len(return_type_args) == 3:
-                        return return_type_args[2]
+                        return_type = return_type_args[2]
                     else:
                         raise Exception(f"Invalid Coroutine annotation {return_type}. Expected Coroutine[ any , any, <return_type>] or just <return_type>")
                 else:
-                    return return_type_origin
-            elif is_union_type(return_type):
-                return_type_args = getattr(return_type, '__args__', None)
-                if return_type_args and len(return_type_args) == 2 and return_type_args[1] == type(None):
-                    return return_type_args[0]
-                else:
-                    raise Exception(f"Invalid Union annotation {return_type}. Expected Union[ <return_type>, None] or just <return_type>")
+                    return_type = return_type_origin
+        else:
+            
+            if issubclass(return_type, Coroutine):
+                return None
             else:
-                
-                if issubclass(return_type, Coroutine):
-                    return None
-                else:
-                    return return_type
+                return_type = return_type
+    
+    if return_type and is_union_type(return_type):
+        return_type_args = getattr(return_type, '__args__', None)
+        if return_type_args and len(return_type_args) == 2 and return_type_args[1] == type(None):
+            return return_type_args[0]
+        else:
+            raise Exception(f"Invalid Union annotation {return_type}. Expected Union[ <return_type>, None] or just <return_type>")
+    else:
+        return return_type
             
             
 def get_function_docs(func: callable)->Tuple:
@@ -177,6 +180,8 @@ def get_arguments_as_pydantic_fields(func) -> Dict[str, ModelField]:
     for arg_name, arg_desc in inspect.signature(func).parameters.items():
         if arg_name != "self":
             default = arg_desc.default if arg_desc.default!=inspect.Parameter.empty else None
+            if arg_desc.annotation==inspect._empty:
+                raise Exception(f"Argument '{arg_name}' of function {func.__name__} has no type annotation")
             argument_types[arg_name] = ModelField(
                 class_validators=None,
                 model_config=model_config,
