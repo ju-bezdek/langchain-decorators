@@ -249,6 +249,11 @@ else:
 
 ```
 
+> Additionally you can also add a `function_call` argument to your LLM prompt to control GPT behavior.
+> - if you set the value to "none" - it will disable the function call for the moment, but it can still see them (useful do to some reasoning/planning before calling the function)
+> - if you set the value to "auto" - GPT will choose to use or to to use the functions
+> - if you set the value to a name of function / or the function it self (decorators will handle resolving the same name as used in schema) it will force GPT to use that function
+
 
 If you use functions argument, the output will be always `OutputWithFunctionCall`
 
@@ -282,17 +287,30 @@ class OutputWithFunctionCall(BaseModel):
         If the function is async, it will be executed in a event loop.
         """
         ...
+     def to_function_message(self, result=None):
+        """
+        Converts the result to a FunctionMessage... 
+        you can override the result collected via execute with your own
+        """
+        ...
 ```
 
 If you want to see how to schema has been build, you can use `get_function_schema` method that is added to the function by the decorator:
 ```python
+from langchain_decorators import get_function_schema
 @llm_function
 def my_func(arg1:str):
     ...
 
-print(my_func.get_function_schema())
+f_schema = get_function_schema(my_func.get_function_schema) 
+print(f_schema)
 
 ```
+
+In order to add the result to memory / agent_scratchpad you can use `to_function_message` to generate an FunctionMessage that LLM will interpret as a Tool/Function result
+
+
+## Using functions
 
 
 # Defining other parameters

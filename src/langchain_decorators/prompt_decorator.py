@@ -54,7 +54,7 @@ def llm_prompt(
 
         `template_format` (Optional[str]): one of [ `f-string` | `f-string-extra` ] ... f-string-extra is a superset of f-string template formats, enabling for optional sections.
 
-        `output_formatting` (Optional[str]): one of [ `auto` | `json` | `str` | `list` ] or `None` or langchain OutputParser object - you can control how will the output be parsed. 
+        `output_parser` (Optional[str]): one of [ `auto` | `json` | `str` | `list` ] or `None` or langchain OutputParser object - you can control how will the output be parsed. 
         
             `auto` - default - determine the output type automatically based on output type annotations
 
@@ -65,6 +65,8 @@ def llm_prompt(
             `boolean` - will parse the output as boolean. Expects clear Yes/No in the output
 
             `json` - will parse the output as json
+
+            `functions` - will use the OpenAI functions to generate the output in desired format ... only for pydataic models and ChatOpenAI model
 
             `markdown` - will parse the output as markdown sections, the name of each section will be returned as a key and the content as a value. For nested sections, the value will be a dict with the same structure.
 

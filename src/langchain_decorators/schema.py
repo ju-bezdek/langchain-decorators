@@ -69,6 +69,10 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
         return result
     
     def to_function_message(self, result=None):
+        """
+        Converts the result to a FunctionMessage... 
+        you can override the result collected via execute with your own
+        """
         if not result:
             if not self.result:
                 raise Exception("The function has not been executed yet, or didn't return a result")
