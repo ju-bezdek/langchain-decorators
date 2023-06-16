@@ -113,6 +113,10 @@ class PromptTypeSettings:
 class PromptTypes:
     UNDEFINED: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
+    BIG_CONTEXT: PromptTypeSettings = PromptTypeSettings(
+        llm=ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k"), 
+        color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
+        
     AGENT_REASONING: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.GREEN, log_level=logging.INFO)
     TOOL: PromptTypeSettings = PromptTypeSettings(
