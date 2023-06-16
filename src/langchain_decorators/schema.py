@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from langchain.schema import FunctionMessage
 import json
 
-from regex import F
+
 
 T = TypeVar("T")
 
