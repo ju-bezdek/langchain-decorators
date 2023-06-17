@@ -129,7 +129,7 @@ def llm_prompt(
         def prepare_call_args(*args, **kwargs):
             global_settings = GlobalSettings.get_current_settings()
 
-            if not StreamingContext.get_context():
+            if _capture_stream and not StreamingContext.get_context():
                 print_log(f"INFO: Not inside StreamingContext. Ignoring capture_stream for {full_name}", logging.DEBUG, LogColors.WHITE)
                 capture_stream=False
             else:
@@ -386,6 +386,7 @@ def _generate_output_with_function_call(result:Any, result_data:dict, verbose, c
         return OutputWithFunctionCall(
                 output=result,
                 output_text=result_data["text"],
+                output_message=result_data["message"],
                 function=_sync_function,
                 function_async=_async_function,
                 function_name=result_data["function_call_info"]["name"],
@@ -395,6 +396,7 @@ def _generate_output_with_function_call(result:Any, result_data:dict, verbose, c
     else:
         return OutputWithFunctionCall(
                 output=result,
+                output_message=result_data["message"],
                 output_text=result_data["text"],
             )
 
