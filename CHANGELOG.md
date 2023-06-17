@@ -33,3 +33,8 @@
 - add BIG_CONTEXT prompt type
 - ton of bugfixes
 
+## Version 0.0.9 (2023-06-17)
+- fix some scenarios of LLM response that raised error
+- save AIMessage with function call in output wrapper
+- fix logging that we are out or stream context, when stream is not on
+
