@@ -1,6 +1,6 @@
 
 from langchain_decorators import llm_prompt, llm_function
-from src.langchain_decorators.common import GlobalSettings
+from langchain_decorators.common import GlobalSettings
 
 
 from langchain_decorators import llm_prompt
