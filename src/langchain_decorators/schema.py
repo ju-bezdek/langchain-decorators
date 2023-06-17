@@ -2,6 +2,7 @@ import asyncio
 import re
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar, Union
 from pydantic import BaseModel
+from langchain.schema import AIMessage
 from langchain.schema import FunctionMessage
 import json
 
@@ -11,6 +12,7 @@ T = TypeVar("T")
 
 class OutputWithFunctionCall(Generic[T],BaseModel):
     output_text:str
+    output_message:AIMessage
     output:T
     function_name:str =None
     function_arguments:Union[Dict[str,Any],str,None]
@@ -20,7 +22,7 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
     
     @property
     def is_function_call(self):
-        return (self.function or self.function_async)
+        return bool(self.function or self.function_async)
     
     @property
     def support_async(self):
@@ -42,6 +44,9 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
         else:
             await asyncio.sleep(0)
             result= self.function(**self.function_arguments)
+            if result and asyncio.iscoroutine(result):
+                # this handles special scenario when fake @llm_function is used
+                result = await result
         return result
         
     def execute(self):

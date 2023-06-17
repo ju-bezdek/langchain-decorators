@@ -1,3 +1,4 @@
+from email.mime import message
 import json
 import logging
 from multiprocessing import Value
@@ -29,6 +30,7 @@ class LLMChainWithFunctionSupport(LLMChain):
     function_schemas:List[dict]=None
     function_call_output_key:str="function_call_info"
     function_output_key:str="function"
+    message_output_key:str="message"
 
     @property
     def output_keys(self) -> List[str]:
@@ -145,10 +147,12 @@ class LLMChainWithFunctionSupport(LLMChain):
         res = {
                 self.output_key: generation.text,
                 self.function_call_output_key: None,
-                self.function_output_key: None
+                self.function_output_key: None,
              }
         if isinstance(generation, ChatGeneration):
-            function_call = generation.message.additional_kwargs.get("function_call")
+            res[self.message_output_key] = generation.message
+            # let's make a copy of the function call so that we don't modify the original
+            function_call = dict(generation.message.additional_kwargs.get("function_call")) if generation.message.additional_kwargs else {}
             if function_call:
                 if isinstance(function_call["arguments"],str):
                     function_call["arguments"]=json.loads(function_call["arguments"])
