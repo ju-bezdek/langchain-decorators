@@ -1,6 +1,7 @@
 from ast import Tuple
 import inspect
 import logging
+import os
 from textwrap import dedent
 import yaml
 from enum import Enum
@@ -15,8 +16,6 @@ class GlobalSettings(BaseModel):
     default_llm: Optional[BaseLanguageModel] = None
     default_streaming_llm: Optional[BaseLanguageModel] = None
     logging_level: int = logging.INFO
-    stdout_logging: bool = True
-
     verbose: bool = False
 
     class Config:
@@ -29,16 +28,17 @@ class GlobalSettings(BaseModel):
                         default_llm=None,
                         default_streaming_llm=None,
                         logging_level=logging.INFO,
-                        stdout_logging: bool = True,
-                        verbose=False,
+                        verbose=None,
                         **kwargs
                         ):
         if default_llm is None:
             default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0613")
         if default_streaming_llm is None:
             default_streaming_llm = ChatOpenAI(temperature=0.0, streaming=True, model="gpt-3.5-turbo-0613")
+        if verbose is None:
+            verbose = os.environ.get("LANGCHAIN_DECORATORS_VERBOSE", False) in [True,"true","True","1"]
         settings = cls(default_llm=default_llm, default_streaming_llm=default_streaming_llm,
-                       logging_level=logging_level, stdout_logging=stdout_logging, verbose=verbose,  **kwargs)
+                       logging_level=logging_level, verbose=verbose,  **kwargs)
         if not hasattr(GlobalSettings, "registry"):
             setattr(GlobalSettings, "registry", {})
         GlobalSettings.registry[settings_type] = settings
