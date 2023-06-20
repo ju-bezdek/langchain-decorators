@@ -1,12 +1,10 @@
 
-from calendar import c
-from gc import callbacks
 import logging
 import inspect
 
 from functools import wraps
 from textwrap import dedent
-from typing import Callable, List, Optional, Sequence, Union
+from typing import Callable, List, Optional,  Union
 
 
 from langchain import LLMChain,  PromptTemplate
@@ -129,11 +127,18 @@ def llm_prompt(
         def prepare_call_args(*args, **kwargs):
             global_settings = GlobalSettings.get_current_settings()
 
-            if _capture_stream and not StreamingContext.get_context():
+            capture_stream=_capture_stream
+
+            if "capture_stream" in kwargs:
+                if not isinstance(capture_stream,bool):
+                    raise ValueError("capture_stream is a reserved kwarg and must be of type bool")
+                capture_stream=kwargs["capture_stream"]
+                del kwargs["capture_stream"]
+
+            if capture_stream and not StreamingContext.get_context():
                 print_log(f"INFO: Not inside StreamingContext. Ignoring capture_stream for {full_name}", logging.DEBUG, LogColors.WHITE)
                 capture_stream=False
-            else:
-                capture_stream=_capture_stream
+            
            
             if not llm:
                 if capture_stream:
