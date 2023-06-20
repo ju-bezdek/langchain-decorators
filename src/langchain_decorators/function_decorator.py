@@ -26,9 +26,9 @@ def get_function_schema(func):
 
 def llm_function(
         function_name:str=None,
-        argument_schema:Union[str, Type[BaseModel], dict]="auto",
         validate_docstrings:bool=True,
         docstring_format:str="auto",
+        **kwargs
         ):
     """
     Decorator for functions that take a language model as first argument.
