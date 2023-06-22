@@ -38,3 +38,6 @@
 - save AIMessage with function call in output wrapper
 - fix logging that we are out or stream context, when stream is not on
 
+## Version 0.0.10 (2023-06-20)
+- async screaming callback support
+- LlmSelector for automatic selection of LLM based on the model context window and prompt length
