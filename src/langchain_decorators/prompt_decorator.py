@@ -16,7 +16,7 @@ from promptwatch import register_prompt_template
 
 from .schema import OutputWithFunctionCall
 
-from .chains import LLMChainWithFunctionSupport
+from .chains import LLMDecoratorChainWithFunctionSupport, LLMDecoratorChain
 
 
 
@@ -139,7 +139,7 @@ def llm_prompt(
                 print_log(f"INFO: Not inside StreamingContext. Ignoring capture_stream for {full_name}", logging.DEBUG, LogColors.WHITE)
                 capture_stream=False
             
-           
+            
             if not llm:
                 if capture_stream:
                     if not global_settings.default_streaming_llm:
@@ -148,8 +148,14 @@ def llm_prompt(
                     prompt_llm=global_settings.default_streaming_llm or global_settings.default_llm
                 else:
                     prompt_llm = global_settings.default_llm
+
+                if prompt_type and prompt_type.llm_selector:
+                    llm_selector= prompt_type.llm_selector
+                else:
+                    llm_selector=  global_settings.llm_selector 
             else:
                 prompt_llm=llm
+                llm_selector=None # if LLM is explicitly provided, we don't use the selector
                 if capture_stream:
                     if  hasattr(llm,"streaming"):
                         if not getattr(llm, "streaming"):
@@ -200,13 +206,13 @@ def llm_prompt(
 
                 
             if functions:
-                llmChain = LLMChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions)
+                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions, llm_selector=llm_selector)
             elif isinstance(prompt_template.output_parser, OpenAIFunctionsPydanticOutputParser):
                 function=prompt_template.output_parser.build_llm_function()
                 kwargs["function_call"] = function
-                llmChain = LLMChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=[function])
+                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=[function], llm_selector=llm_selector)
             else:
-                llmChain = LLMChain(llm=prompt_llm, prompt=prompt_template,  memory=memory)
+                llmChain = LLMDecoratorChain(llm=prompt_llm, prompt=prompt_template,  memory=memory, llm_selector=llm_selector)
             other_supported_kwargs={"stop","callbacks","function_call"}
             unexpected_inputs = [key for key in kwargs if key not in prompt_template.input_variables and key not in other_supported_kwargs ]
             if unexpected_inputs:

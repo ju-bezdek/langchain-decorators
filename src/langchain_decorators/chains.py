@@ -14,6 +14,8 @@ from langchain.prompts.chat import  ChatPromptValue
 from langchain.schema import PromptValue, ChatGeneration
 from pydantic import root_validator
 
+from .common import LlmSelector
+
 from .function_decorator import get_function_schema
 try:
     from langchain.tools.convert_to_openai import format_tool_to_openai_function
@@ -23,7 +25,51 @@ except ImportError:
 MODELS_WITH_FUNCTIONS_SUPPORT=["gpt-3.5-turbo-0613","gpt-4-0613"]
 
 
-class LLMChainWithFunctionSupport(LLMChain):
+
+class LLMDecoratorChain(LLMChain):
+
+    llm_selector:LlmSelector=None
+    """ Optional LLM selector to pick the right LLM for the job. """
+    
+
+    def select_llm(self, prompts):
+        if self.llm_selector:
+            # we pick the right LLM based on the first prompt
+            first_prompt = prompts[0]
+            if isinstance(first_prompt, ChatPromptValue):
+                llm = self.llm_selector.get_llm(first_prompt.messages)
+            else:
+                llm =  self.llm_selector.get_llm(first_prompt.to_string())
+        else:
+            llm = self.llm
+        return llm
+
+    def generate(
+        self,
+        input_list: List[Dict[str, Any]],
+        run_manager: Optional[CallbackManagerForChainRun] = None,
+    ) -> LLMResult:
+        """Generate LLM result from inputs."""
+        prompts, stop = self.prep_prompts(input_list, run_manager=run_manager)
+
+
+        return self.select_llm(prompts).generate_prompt(
+            prompts, stop, callbacks=run_manager.get_child() if run_manager else None
+        )
+
+    async def agenerate(
+        self,
+        input_list: List[Dict[str, Any]],
+        run_manager: Optional[AsyncCallbackManagerForChainRun] = None,
+    ) -> LLMResult:
+        """Generate LLM result from inputs."""
+        prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
+
+        return await self.select_llm(prompts).agenerate_prompt(
+            prompts, stop, callbacks=run_manager.get_child() if run_manager else None
+        )
+
+class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
 
 
     functions:Optional[List[Union[Callable, BaseTool]]] = []
@@ -71,6 +117,18 @@ class LLMChainWithFunctionSupport(LLMChain):
         return values
     
 
+    def select_llm(self, prompts):
+        if self.llm_selector:
+            # we pick the right LLM based on the first prompt
+            first_prompt = prompts[0]
+            if isinstance(first_prompt, ChatPromptValue):
+                llm = self.llm_selector.get_llm(first_prompt.messages, function_schemas=self.function_schemas)
+            else:
+                llm =  self.llm_selector.get_llm(first_prompt.to_string(),function_schemas=self.function_schemas)
+        else:
+            llm = self.llm
+        return llm
+    
     def preprocess_inputs(self, input_list):
         additional_kwargs={}
         if "function_call" in input_list[0]:
@@ -103,10 +161,10 @@ class LLMChainWithFunctionSupport(LLMChain):
         prompts, stop = self.prep_prompts(input_list, run_manager=run_manager)
         if self.functions:
             
-            chat_model:BaseChatModel=self.llm
+            chat_model:BaseChatModel=self.select_llm(prompts)
           
             messages = [prompt.to_messages() for prompt in prompts]
-             
+
             result =  chat_model.generate(messages=messages, 
                                         stop=stop, callbacks=run_manager.get_child() if run_manager else None,
                                         functions=self.function_schemas,
@@ -114,7 +172,7 @@ class LLMChainWithFunctionSupport(LLMChain):
                                         )
             return result
         else:
-            return self.llm.generate_prompt(
+            return self.select_llm(prompts).generate_prompt(
                 prompts, stop, callbacks=run_manager.get_child() if run_manager else None
             )
 
@@ -128,7 +186,7 @@ class LLMChainWithFunctionSupport(LLMChain):
     
         prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
         if self.functions:
-            chat_model:BaseChatModel=self.llm
+            chat_model:BaseChatModel=self.select_llm(prompts)
             if len(prompts)!=1:
                 raise ValueError("Only one prompt is supported when using functions")
             messages = [prompt.to_messages() for prompt in prompts]
@@ -139,7 +197,7 @@ class LLMChainWithFunctionSupport(LLMChain):
                                          **additional_kwargs
                                          )
         else:
-            return await self.llm.agenerate_prompt(
+            return await self.select_llm(prompts).agenerate_prompt(
                 prompts, stop, callbacks=run_manager.get_child() if run_manager else None
             )
         
