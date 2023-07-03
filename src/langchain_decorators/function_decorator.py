@@ -28,6 +28,7 @@ def llm_function(
         function_name:str=None,
         validate_docstrings:bool=True,
         docstring_format:str="auto",
+        arguments_schema:Type[BaseModel]=None,
         **kwargs
         ):
     """
@@ -118,7 +119,8 @@ def llm_function(
             return build_func_schema(_func, 
                                             function_name = function_name, 
                                             format=docstring_format, 
-                                            validate_docstrings=_validate_docstrings
+                                            validate_docstrings=_validate_docstrings,
+                                            arguments_schema=arguments_schema
                                           )
     
     def decorator(func):
@@ -168,7 +170,8 @@ def build_func_schema(
         func:Callable, 
         function_name:str=None, 
         format:Union[DocstringsFormat,str]="auto", 
-        validate_docstrings:bool=True
+        validate_docstrings:bool=True,
+        arguments_schema:Type[BaseModel]=None
         ):
     
     if isinstance(format,str):
@@ -180,26 +183,20 @@ def build_func_schema(
         raise ValueError(f"Invalid function name: {function_name} for {get_function_full_name(func)}. Only letters, numbers and underscores are allowed. The name must start with a letter or an underscore.")
    
     func_name =  function_name or func.__name__
-    arguments_fields = get_arguments_as_pydantic_fields(func)
-    
     args_schema = None
-    if len(arguments_fields)==1:
-        first_param:ModelField = list(arguments_fields.values())[0]
-            
-        if first_param.type_==first_param.outer_type_ and first_param.required == True and issubclass(first_param.type_, BaseModel):
-            if first_param.type_==BaseModel:
-                raise ValueError(f"Invalid argument type for {get_function_full_name(func)}. The argument type cannot be pydantic BaseModel. Please use a subclass of BaseModel.")
-            # the one and only argument is a pydantic model
-            args_schema =  first_param.type_.schema()
-            sanitize_pydantic_schema(args_schema)
-            args_schema={
-                "type":"object",
-                "properties":args_schema["properties"],
-                "required":args_schema["required"]
-            }
     
-    if not args_schema:
-        # any other case, that function arguments are not wrapped in pydantic model
+    if arguments_schema:
+        args_schema = arguments_schema.schema()
+        sanitize_pydantic_schema(args_schema)
+        args_schema={
+            "type":"object",
+            "properties":args_schema["properties"],
+            "required":args_schema["required"]
+        }
+    else:
+
+        arguments_fields = get_arguments_as_pydantic_fields(func)
+
         if func_docs:
             docsctrings_param_description = find_and_parse_params_from_docstrings(func_docs,format=format)
             if docsctrings_param_description:
