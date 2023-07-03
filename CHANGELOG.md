@@ -41,3 +41,9 @@
 ## Version 0.0.10 (2023-06-20)
 - async screaming callback support
 - LlmSelector for automatic selection of LLM based on the model context window and prompt length
+
+## Version 0.0.11 (2023-07-03)
+- fixed streaming
+- multiple little bugfixes
+- option to set the expected generated token count as a hint for LLM selector
+- add argument schema option for llm_function
