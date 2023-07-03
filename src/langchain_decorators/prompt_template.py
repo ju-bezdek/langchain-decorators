@@ -295,7 +295,7 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                 
                 message_templates.append(msg_template)
 
-            template = ChatPromptTemplate(messages=message_templates, input_variables=self.input_variables, output_parser=self.output_parser)
+            template = ChatPromptTemplate(messages=message_templates, output_parser=self.output_parser)
         else:
             template = self.prompt_template_drafts.finalize_template(kwargs)
             template.output_parser = self.output_parser
