@@ -164,7 +164,7 @@ class PydanticOutputParser(BaseOutputParser[T]):
                 field_descriptions[field] = (
                     self.get_json_example_description(_type, indentation_level+1))
             elif _type == str:
-                desc = f'\" {_get_str_field_description(field_info)} "'
+                desc = _get_str_field_description(field_info)
                 field_descriptions[field] = (desc)
             elif _type == datetime:
                 field_descriptions[field] = (
@@ -431,22 +431,22 @@ def _get_str_field_description(field_info: ModelField, ignore_nullable: bool = F
     _nullable = field_info.allow_none
     _description = field_info.field_info.description
     _example = field_info.field_info.extra.get("example")
-    _one_of = field_info.field_info.extra.get("one_of")
+    _enum = field_info.field_info.extra.get("enum")
     _regex = field_info.field_info.extra.get("regex")
-    _one_of = field_info.field_info.extra.get("one_of")
+    _one_of = _enum or field_info.field_info.extra.get("one_of")
     _regex = field_info.field_info.extra.get("regex")
     description = []
     if _description:
         description.append(_description)
     if _one_of:
         description.append("one of these values: [ ")
-        description.append(" | ".join(_one_of))
+        description.append(" | ".join([f"\"{enum_val}\"" for enum_val in _one_of]))
         description.append(" ]")
     if _example:
         description.append(f"e.g. {_example}")
     if _nullable and not ignore_nullable:
         description.append("... or null if not available")
-    if _regex and not _one_of:
+    if _regex and not _enum:
         description.append(f"... must match this regex: {_regex}")
 
     if description:
@@ -454,4 +454,4 @@ def _get_str_field_description(field_info: ModelField, ignore_nullable: bool = F
     else:
         description = "?"
 
-    return description
+    return (description if _one_of else f"\" {description} \"")
