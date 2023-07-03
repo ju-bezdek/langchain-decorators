@@ -38,6 +38,7 @@ def llm_prompt(
         format_instructions_parameter_key:str="FORMAT_INSTRUCTIONS",
         retry_on_output_parsing_error:bool=True,
         verbose:bool=None,
+        expected_gen_tokens:Optional[int]=None,
         ):
     """
     Decorator for functions that turns a regular function into a LLM prompt executed with default model and settings.
@@ -80,6 +81,8 @@ def llm_prompt(
         `retry_on_output_parsing_error` - whether to try to re-format the output if the output parser fails to parse the output by another LLM call
 
         `verbose` - whether to print the response from LLM into console
+
+        `expected_gen_tokens` - hint for LLM selector ... if not set, default values of the LLM selector will be used (usually 1/3 of the prompt length)
     """
     
 
@@ -141,7 +144,12 @@ def llm_prompt(
             
             
             if not llm:
-                if capture_stream:
+                if prompt_type and prompt_type.llm_selector:
+                    llm_selector= prompt_type.llm_selector
+                else:
+                    llm_selector=  global_settings.llm_selector 
+
+                if capture_stream and not llm_selector:
                     if not global_settings.default_streaming_llm:
                         print_log(f"Warning: capture_stream on {name} is on, but the default LLM {llm} doesn't seem to be supporting streaming.", logging.WARNING, LogColors.YELLOW)
                         
@@ -149,10 +157,7 @@ def llm_prompt(
                 else:
                     prompt_llm = global_settings.default_llm
 
-                if prompt_type and prompt_type.llm_selector:
-                    llm_selector= prompt_type.llm_selector
-                else:
-                    llm_selector=  global_settings.llm_selector 
+                
             else:
                 prompt_llm=llm
                 llm_selector=None # if LLM is explicitly provided, we don't use the selector
@@ -206,13 +211,13 @@ def llm_prompt(
 
                 
             if functions:
-                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions, llm_selector=llm_selector)
+                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions, llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens)
             elif isinstance(prompt_template.output_parser, OpenAIFunctionsPydanticOutputParser):
                 function=prompt_template.output_parser.build_llm_function()
                 kwargs["function_call"] = function
-                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=[function], llm_selector=llm_selector)
+                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=[function], llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens )
             else:
-                llmChain = LLMDecoratorChain(llm=prompt_llm, prompt=prompt_template,  memory=memory, llm_selector=llm_selector)
+                llmChain = LLMDecoratorChain(llm=prompt_llm, prompt=prompt_template,  memory=memory, llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens)
             other_supported_kwargs={"stop","callbacks","function_call"}
             unexpected_inputs = [key for key in kwargs if key not in prompt_template.input_variables and key not in other_supported_kwargs ]
             if unexpected_inputs:

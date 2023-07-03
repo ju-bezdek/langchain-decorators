@@ -158,9 +158,11 @@ class GlobalSettings(BaseModel):
         if llm_selector is None and default_llm is None and default_streaming_llm is None:
             # only use llm_selector if no default_llm and default_streaming_llm is defined, because than we dont know what rules to set up
             default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0613") #  '-0613' - has function calling
+            default_streaming_llm = make_llm_streamable(default_llm)
             llm_selector = LlmSelector()\
                 .with_llm(default_llm)\
                 .with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k-0613"))  #  '-0613' - has function calling
+        
         else:
             if default_llm is None:
                 default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0613")  #  '-0613' - has function calling
@@ -277,7 +279,7 @@ def get_func_return_type(func: callable)->Tuple:
                     return_type = return_type_origin
         else:
             
-            if issubclass(return_type, Coroutine):
+            if return_type and issubclass(return_type, Coroutine):
                 return None
             else:
                 return_type = return_type
@@ -288,6 +290,9 @@ def get_func_return_type(func: callable)->Tuple:
             return return_type_args[0]
         else:
             raise Exception(f"Invalid Union annotation {return_type}. Expected Union[ <return_type>, None] or just <return_type>")
+    elif is_generic_type(return_type):
+        # this should cover list and dict
+        return get_origin(return_type)
     else:
         return return_type
             
@@ -331,7 +336,21 @@ def get_arguments_as_pydantic_fields(func) -> Dict[str, ModelField]:
 
 
 def make_llm_streamable(llm:BaseLanguageModel):
-    return llm.__class__(**llm.lc_kwargs)
+    try:
+        if hasattr(llm,"lc_kwargs"):
+            # older version support
+            lc_kwargs = {**llm.lc_kwargs}
+        else:
+            lc_kwargs = {
+                k: getattr(llm, k, v)
+                for k, v in llm._lc_kwargs.items()
+                if not (llm.__exclude_fields__ or {}).get(k, False)  # type: ignore
+            }
+        lc_kwargs["streaming"] = True
+        return llm.__class__(**lc_kwargs)
+    except Exception as e:
+        logging.warning(f"Could not make llm {llm} streamable. Error: {e}")
+        
 
 def count_tokens(prompt: Union[str,List[BaseMessage]], llm:BaseLanguageModel) -> int:
     """Returns the number of tokens in a text string."""

@@ -30,19 +30,26 @@ class LLMDecoratorChain(LLMChain):
 
     llm_selector:LlmSelector=None
     """ Optional LLM selector to pick the right LLM for the job. """
-    
+    capture_stream:bool=False
+    expected_gen_tokens:Optional[int]=None
 
     def select_llm(self, prompts):
         if self.llm_selector:
             # we pick the right LLM based on the first prompt
             first_prompt = prompts[0]
             if isinstance(first_prompt, ChatPromptValue):
-                llm = self.llm_selector.get_llm(first_prompt.messages)
+                llm = self.llm_selector.get_llm(first_prompt.messages,**self._additional_llm_selector_args())
             else:
-                llm =  self.llm_selector.get_llm(first_prompt.to_string())
+                llm =  self.llm_selector.get_llm(first_prompt.to_string(),**self._additional_llm_selector_args())
         else:
             llm = self.llm
         return llm
+    
+    def _additional_llm_selector_args(self):
+        return {
+            "expected_generated_tokens":self.expected_gen_tokens, 
+            "streaming":self.capture_stream
+            }
 
     def generate(
         self,
@@ -117,17 +124,11 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
         return values
     
 
-    def select_llm(self, prompts):
-        if self.llm_selector:
-            # we pick the right LLM based on the first prompt
-            first_prompt = prompts[0]
-            if isinstance(first_prompt, ChatPromptValue):
-                llm = self.llm_selector.get_llm(first_prompt.messages, function_schemas=self.function_schemas)
-            else:
-                llm =  self.llm_selector.get_llm(first_prompt.to_string(),function_schemas=self.function_schemas)
-        else:
-            llm = self.llm
-        return llm
+
+    def _additional_llm_selector_args(self):
+        args = super()._additional_llm_selector_args()
+        args["function_schemas"]=self.function_schemas
+        return args
     
     def preprocess_inputs(self, input_list):
         additional_kwargs={}
