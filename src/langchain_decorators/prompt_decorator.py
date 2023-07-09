@@ -15,11 +15,7 @@ from langchain.llms.base import BaseLanguageModel
 from promptwatch import register_prompt_template
 
 from .schema import OutputWithFunctionCall
-
 from .chains import LLMDecoratorChainWithFunctionSupport, LLMDecoratorChain
-
-
-
 from .common import *
 from .prompt_template import PromptDecoratorTemplate
 from .output_parsers import *
@@ -40,6 +36,8 @@ def llm_prompt(
         verbose:bool=None,
         expected_gen_tokens:Optional[int]=None,
         llm_selector_rule_key:Optional[str]=None,
+        functions_source:str=None,
+        memory_source:str=None,
         ):
     """
     Decorator for functions that turns a regular function into a LLM prompt executed with default model and settings.
@@ -86,6 +84,8 @@ def llm_prompt(
         `expected_gen_tokens` - hint for LLM selector ... if not set, default values of the LLM selector will be used (usually 1/3 of the prompt length)
 
         `llm_selector_rule_key` - key of the LLM selector rule to use ... if set, only LLMs with assigned rule with this key will be considered. You can also use llm_selector_rule_key argument when calling the llm_prompt function to override the default rule key. 
+
+        `functions_source` - only for bound functions ... name of a field or property on `self` that should be used as a source of functions for the OpenAI functions. If not set, you still can pass in functions as an argument, which will also override this.
     """
     
 
@@ -210,12 +210,24 @@ def llm_prompt(
             if "memory" in kwargs:
                 memory = kwargs.pop("memory")
             else:
-                memory=None
+                if memory_source:
+                    if input_variables_source:
+                        memory = getattr(input_variables_source, memory_source)
+                    else:
+                        raise Exception(f"memory_source can only be used on bound functions (arg[0] is not set)")
+                else:
+                    memory=None
 
             if "functions" in kwargs:
                 functions=kwargs.pop("functions")
             else:
-                functions=None
+                if functions_source:
+                    if input_variables_source:
+                        functions = getattr(input_variables_source, functions_source)
+                    else:
+                        raise Exception(f"functions_source can only be used on bound functions (arg[0] is not set)")
+                else:
+                    functions=None
 
                 
             if functions:

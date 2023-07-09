@@ -1,8 +1,5 @@
-from email.mime import message
 import json
 import logging
-from multiprocessing import Value
-from pyexpat.errors import messages
 from typing import Any, Callable, Dict, List, Optional, Union
 from langchain import LLMChain
 from langchain.schema import LLMResult
@@ -11,7 +8,7 @@ from langchain.tools.base import BaseTool
 from langchain.chat_models import ChatOpenAI
 from langchain.chat_models.base import BaseChatModel
 from langchain.prompts.chat import  ChatPromptValue
-from langchain.schema import PromptValue, ChatGeneration
+from langchain.schema import ChatGeneration
 from pydantic import root_validator
 
 from .common import LlmSelector
@@ -134,6 +131,10 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
     
     def preprocess_inputs(self, input_list):
         additional_kwargs={}
+        if self.memory is not None:
+            # we are sending out more outputs... memory expects only one (AIMessage... so let's set it, becasue user has no way to know these internals)
+            if hasattr(self.memory, "output_key") and not self.memory.output_key:
+                self.memory.output_key = "message"
         if "function_call" in input_list[0]:
             for input in input_list:
                 function_call=input.pop("function_call")
@@ -159,6 +160,8 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
     ) -> LLMResult:
         """Generate LLM result from inputs."""
         
+        
+
         additional_kwargs = self.preprocess_inputs(input_list)
            
         prompts, stop = self.prep_prompts(input_list, run_manager=run_manager)
