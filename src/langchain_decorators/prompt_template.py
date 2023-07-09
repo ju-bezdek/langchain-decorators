@@ -14,7 +14,7 @@ from textwrap import dedent
 from langchain import PromptTemplate
 from langchain.prompts import StringPromptTemplate
 from langchain.prompts.chat import  MessagesPlaceholder, ChatMessagePromptTemplate, ChatPromptTemplate, ChatPromptValue
-from langchain.schema import PromptValue, BaseOutputParser
+from langchain.schema import PromptValue, BaseOutputParser, BaseMemory, BaseChatMessageHistory
 
 from promptwatch import register_prompt_template
 from .schema import OutputWithFunctionCall
@@ -79,7 +79,7 @@ def build_template_drafts(template:str, format:str, role:str=None )->PromptTempl
             partial_input_variables = {v for _, v, _, _ in Formatter().parse(optional_partial) if v is not None}
             
             if not partial_input_variables:
-                raise ValueError(f"Optional partial {optional_partial} does not contain any optional variables.")
+                raise ValueError(f"Optional partial {optional_partial} does not contain any optional variables. Didn't you forget to wrap your parameter in {{}}?")
             
             
             # replace  {} with [] and all other non-word characters with underscore
@@ -317,7 +317,15 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                 if isinstance(msg,MessagesPlaceholder):
                     if not kwargs.get(msg.variable_name):
                         kwargs[msg.variable_name] = []
-                    
+        
+        for key, value in list(kwargs.items()):
+            if isinstance(value, BaseMemory):
+                memory:BaseMemory = kwargs.pop(key)
+                
+                kwargs.update(memory.load_memory_variables(kwargs))
+            elif isinstance(value, BaseChatMessageHistory):
+                kwargs[key] = value.messages
+
         formatted =  final_template.format_prompt(**kwargs)
         if isinstance(formatted,ChatPromptValue):
             for msg in list(formatted.messages):

@@ -17,9 +17,25 @@ langchain_decorators.GlobalSettings.define_settings(
     #     .with_llm_rule(ChatGooglePalm(),max_tokens=512)\  # ... if you want to use LLM whose window is not defined in langchain_decorators.common.MODEL_LIMITS (only OpenAI and Anthropic are there)
     #     .with_llm(ChatOpenAI())\
     #     .with_llm(ChatOpenAI(model="gpt-3.5-turbo-16k-0613"))\
-    #     .with_llm(ChatOpenAI(model="claude-v1.3-100k"))
-    # )
+
+    # 
     )
+
+
+@llm_prompt()
+def plan_actions(goal_definition:str)->str:
+    """
+    Here is our goal:
+    {goal_definition}
+
+    Write down a plan of actions to achieve this goal as bullet points:
+    """
+
+chatGPT_plan = plan_actions(goal_definition="I want to build a SaaS startup")
+print(chatGPT_plan)
+gpt4_plan = plan_actions(goal_definition="I want to build a SaaS startup", llm_selector_rule_key="GPT4")
+print(gpt4_plan)
+
 
 @llm_prompt
 def get_names_and_sentiment(user_input:str)->str:
@@ -27,6 +43,13 @@ def get_names_and_sentiment(user_input:str)->str:
     Summarize the key bullet points from this text:
     {user_input}
     """
+
+response = requests.get("https://raw.githubusercontent.com/ju-bezdek/langchain-decorators/main/README.md")
+langchain_decorators_readme = response.text[:5000]
+get_names_and_sentiment(user_input=langchain_decorators_readme)
+
+
+
 
 response = requests.get("https://raw.githubusercontent.com/ju-bezdek/langchain-decorators/main/README.md")
 langchain_decorators_readme = response.text[:5000]

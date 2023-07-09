@@ -32,6 +32,7 @@ class LLMDecoratorChain(LLMChain):
     """ Optional LLM selector to pick the right LLM for the job. """
     capture_stream:bool=False
     expected_gen_tokens:Optional[int]=None
+    llm_selector_rule_key:Optional[str]=None
 
     def select_llm(self, prompts):
         if self.llm_selector:
@@ -48,7 +49,8 @@ class LLMDecoratorChain(LLMChain):
     def _additional_llm_selector_args(self):
         return {
             "expected_generated_tokens":self.expected_gen_tokens, 
-            "streaming":self.capture_stream
+            "streaming":self.capture_stream,
+            "llm_selector_rule_key":self.llm_selector_rule_key
             }
 
     def generate(

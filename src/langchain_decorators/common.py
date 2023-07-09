@@ -46,7 +46,16 @@ class LlmSelector(BaseModel):
  
         return self
 
-    def with_llm_rule(self, llm:BaseLanguageModel, max_tokens:int):
+    def with_llm_rule(self, llm:BaseLanguageModel, max_tokens:int, llm_selector_rule_key:str=None):
+        """ Add a LLM with a selection rule defined by max tokens and llm_selector_rule_key.
+        
+
+        Args:
+            llm (BaseLanguageModel): The LLM to add
+            max_tokens (int): The maximum number of tokens that the LLM can generate / we want it to use it for.
+            llm_selector_rule_key (str, optional): Optional selection key to limit the selection by. This allows us to pick LLM only from a subset of LLMs (or even just one). Defaults to None.
+
+        """
         i=-1
         for i,rule in enumerate(self.rules):
             rule_max_token=rule.get("max_tokens")
@@ -54,7 +63,7 @@ class LlmSelector(BaseModel):
                 i=i-1
                 break
         i=i+1
-        self.rules.insert(i, dict(max_tokens=max_tokens))
+        self.rules.insert(i, dict(max_tokens=max_tokens, llm_selector_rule_key=llm_selector_rule_key))
         self.llms[i]=llm    
         return self
         
@@ -64,7 +73,7 @@ class LlmSelector(BaseModel):
                 return max_tokens
         
 
-    def get_llm(self, prompt:Union[str,List[BaseMessage]], function_schemas:List[dict]=None, expected_generated_tokens:int=None, streaming=False)->BaseLanguageModel:
+    def get_llm(self, prompt:Union[str,List[BaseMessage]], function_schemas:List[dict]=None, expected_generated_tokens:int=None, streaming=False, llm_selector_rule_key:str=None)->BaseLanguageModel:
         """Picks the best LLM based on the rules and the prompt length.
 
         Args:
@@ -80,11 +89,14 @@ class LlmSelector(BaseModel):
         first_rule = self.rules[0]
         first_token_threshold = first_rule.get("max_tokens")
         total_tokens_estimate = self.get_expected_total_tokens(prompt, function_schemas=function_schemas, estimate=True, expected_generated_tokens=expected_generated_tokens)
-        if total_tokens_estimate<first_token_threshold:
+        if total_tokens_estimate<first_token_threshold and not llm_selector_rule_key:
             result_index = 0
         else:
             total_tokens = self.get_expected_total_tokens(prompt, function_schemas=function_schemas, estimate=False, expected_generated_tokens=expected_generated_tokens) 
             for i, rule in enumerate(self.rules):
+                if llm_selector_rule_key:
+                    if rule.get("llm_selector_rule_key") != llm_selector_rule_key:
+                        continue
                 max_tokens = rule.get("max_tokens")
                 if max_tokens and max_tokens >=total_tokens:
                     result_index = i
@@ -161,7 +173,9 @@ class GlobalSettings(BaseModel):
             default_streaming_llm = make_llm_streamable(default_llm)
             llm_selector = LlmSelector()\
                 .with_llm(default_llm)\
-                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k-0613"))  #  '-0613' - has function calling
+                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k-0613"))\
+                .with_llm_rule(ChatOpenAI(temperature=0.0, model="gpt-4-0613"), llm_selector_rule_key="GPT4", max_tokens=8000)\
+                .with_llm_rule(ChatOpenAI(temperature=0.0, model="gpt-4-32k-0613"), llm_selector_rule_key="GPT4", max_tokens=32000) 
         
         else:
             if default_llm is None:
@@ -251,10 +265,20 @@ class PromptTypeSettings:
 class PromptTypes:
     UNDEFINED: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
+    
     BIG_CONTEXT: PromptTypeSettings = PromptTypeSettings(
         llm=ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k"), 
         color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
-        
+
+    GPT4: PromptTypeSettings = PromptTypeSettings(
+        llm=ChatOpenAI(temperature=0.0, model="gpt-4-0613"), 
+        color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
+     
+    BIG_CONTEXT_GPT4: PromptTypeSettings = PromptTypeSettings(
+        llm=ChatOpenAI(temperature=0.0, model="gpt-4-32k-0613"), 
+        color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
+    
+    
     AGENT_REASONING: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.GREEN, log_level=logging.INFO)
     TOOL: PromptTypeSettings = PromptTypeSettings(

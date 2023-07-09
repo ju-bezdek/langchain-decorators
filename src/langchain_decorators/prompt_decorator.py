@@ -39,6 +39,7 @@ def llm_prompt(
         retry_on_output_parsing_error:bool=True,
         verbose:bool=None,
         expected_gen_tokens:Optional[int]=None,
+        llm_selector_rule_key:Optional[str]=None,
         ):
     """
     Decorator for functions that turns a regular function into a LLM prompt executed with default model and settings.
@@ -65,7 +66,7 @@ def llm_prompt(
 
             `json` - will parse the output as json
 
-            `functions` - will use the OpenAI functions to generate the output in desired format ... only for pydataic models and ChatOpenAI model
+            `functions` - will use the OpenAI functions to generate the output in desired format ... only for pydantic models and ChatOpenAI model
 
             `markdown` - will parse the output as markdown sections, the name of each section will be returned as a key and the content as a value. For nested sections, the value will be a dict with the same structure.
 
@@ -83,6 +84,8 @@ def llm_prompt(
         `verbose` - whether to print the response from LLM into console
 
         `expected_gen_tokens` - hint for LLM selector ... if not set, default values of the LLM selector will be used (usually 1/3 of the prompt length)
+
+        `llm_selector_rule_key` - key of the LLM selector rule to use ... if set, only LLMs with assigned rule with this key will be considered. You can also use llm_selector_rule_key argument when calling the llm_prompt function to override the default rule key. 
     """
     
 
@@ -111,7 +114,7 @@ def llm_prompt(
         name=func.__name__
         full_name=f"{func.__module__}.{name}" if func.__module__!="__main__" else name
         is_async = inspect.iscoroutinefunction(func)
-
+        _llm_selector_rule_key=llm_selector_rule_key
 
         
 
@@ -157,6 +160,11 @@ def llm_prompt(
                 else:
                     prompt_llm = global_settings.default_llm
 
+                if kwargs.get("llm_selector_rule_key"):
+                    llm_selector_rule_key=kwargs["llm_selector_rule_key"]
+                    del kwargs["llm_selector_rule_key"]
+                else:
+                    llm_selector_rule_key=_llm_selector_rule_key
                 
             else:
                 prompt_llm=llm
@@ -211,13 +219,13 @@ def llm_prompt(
 
                 
             if functions:
-                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions, llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens)
+                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions, llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens, llm_selector_rule_key=llm_selector_rule_key )
             elif isinstance(prompt_template.output_parser, OpenAIFunctionsPydanticOutputParser):
                 function=prompt_template.output_parser.build_llm_function()
                 kwargs["function_call"] = function
-                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=[function], llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens )
+                llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=[function], llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens, llm_selector_rule_key=llm_selector_rule_key  )
             else:
-                llmChain = LLMDecoratorChain(llm=prompt_llm, prompt=prompt_template,  memory=memory, llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens)
+                llmChain = LLMDecoratorChain(llm=prompt_llm, prompt=prompt_template,  memory=memory, llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens, llm_selector_rule_key=llm_selector_rule_key )
             other_supported_kwargs={"stop","callbacks","function_call"}
             unexpected_inputs = [key for key in kwargs if key not in prompt_template.input_variables and key not in other_supported_kwargs ]
             if unexpected_inputs:

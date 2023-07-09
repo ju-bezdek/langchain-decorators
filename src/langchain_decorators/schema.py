@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar, Union
 from pydantic import BaseModel
@@ -73,21 +74,31 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
         self.result = result
         return result
     
+    
     def to_function_message(self, result=None):
         """
-        Converts the result to a FunctionMessage... 
-        you can override the result collected via execute with your own
+        Deprecated: Use function_output_to_message instead
         """
-        if not result:
+        logging.warning("to_function_message is deprecated, use function_output_to_message instead")
+        return self.function_output_to_message(function_output=result)
+    
+    def function_output_to_message(self, function_output=None):
+        """
+        Converts the result of the functional call to a FunctionMessage... 
+        you can override the result collected via execute with your own by providing function_output
+
+        Args:
+            function_output (Any, optional): function output. If None, it the result collected via execute() or execute_async() will be used. (One of them must be called before).
+        """
+        if not function_output:
             if not self.result:
                 raise Exception("The function has not been executed yet, or didn't return a result")
-            result = self.result
+            function_output = self.result
 
-        if not isinstance(result,str):
-            result = json.dumps(result)
+        if not isinstance(function_output,str):
+            function_output = json.dumps(function_output)
 
-        return FunctionMessage(name=self.function_name, content=result)
-    
+        return FunctionMessage(name=self.function_name, content=function_output)
 
 
 
