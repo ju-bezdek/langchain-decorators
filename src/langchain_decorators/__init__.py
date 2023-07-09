@@ -5,6 +5,6 @@ from .streaming_context import StreamingContext
 from .prompt_decorator import llm_prompt
 from .function_decorator import llm_function, get_function_schema
 
-__version__="0.0.11"
+__version__="0.0.12"
 
 

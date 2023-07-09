@@ -47,3 +47,8 @@
 - multiple little bugfixes
 - option to set the expected generated token count as a hint for LLM selector
 - add argument schema option for llm_function
+
+## Version 0.0.12 (2023-07-9)
+New parameters in llm decorator
+- support for `llm_selector_rule_key` to sub selection of LLM's to for consideration during selection. This enables you to enforce pick only some models (like GPT4 for instance) for particular prompts, or even for particular runs
+- support for `function_source` and `memory_source` to point pick properties/attributes of the instance prompt is bound to (aka `self`) as source of functions and memories, so we wont need to send pass it in every time
