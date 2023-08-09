@@ -7,7 +7,7 @@ import os
 from textwrap import dedent
 import yaml
 from enum import Enum
-from typing import Any, Coroutine, Dict, List, Union, Optional, Tuple, get_origin
+from typing import Any, Coroutine, Dict, List, Type, Union, Optional, Tuple, get_args, get_origin
 from pydantic import BaseConfig, BaseModel, Extra, Field
 from pydantic.fields import ModelField
 from langchain.llms.base import BaseLanguageModel
@@ -36,11 +36,11 @@ class LlmSelector(BaseModel):
         super().__init__(generation_min_tokens=generation_min_tokens, prompt_to_generation_ratio=prompt_to_generation_ratio)
 
 
-    def with_llm(self, llm:BaseLanguageModel):
+    def with_llm(self, llm:BaseLanguageModel,  llm_selector_rule_key:str=None):
         """ this will automatically add a rule with token window based on the model name. Only works for OpenAI and Anthropic models."""
         max_tokens = self.get_model_window(llm.model_name)
         if max_tokens:
-            self.with_llm_rule(llm, max_tokens)
+            self.with_llm_rule(llm, max_tokens, llm_selector_rule_key=llm_selector_rule_key)
         else:
             raise Exception(f"Could not find a token limit for model {llm.model_name}. Please use `with_llm_rule` and specify the max_tokens for your model.")
  
@@ -56,13 +56,7 @@ class LlmSelector(BaseModel):
             llm_selector_rule_key (str, optional): Optional selection key to limit the selection by. This allows us to pick LLM only from a subset of LLMs (or even just one). Defaults to None.
 
         """
-        i=-1
-        for i,rule in enumerate(self.rules):
-            rule_max_token=rule.get("max_tokens")
-            if rule_max_token and rule_max_token > max_tokens:
-                i=i-1
-                break
-        i=i+1
+        i=len(self.rules)
         self.rules.insert(i, dict(max_tokens=max_tokens, llm_selector_rule_key=llm_selector_rule_key))
         self.llms[i]=llm    
         return self
@@ -172,10 +166,10 @@ class GlobalSettings(BaseModel):
             default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0613") #  '-0613' - has function calling
             default_streaming_llm = make_llm_streamable(default_llm)
             llm_selector = LlmSelector()\
-                .with_llm(default_llm)\
-                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k-0613"))\
-                .with_llm_rule(ChatOpenAI(temperature=0.0, model="gpt-4-0613"), llm_selector_rule_key="GPT4", max_tokens=8000)\
-                .with_llm_rule(ChatOpenAI(temperature=0.0, model="gpt-4-32k-0613"), llm_selector_rule_key="GPT4", max_tokens=32000) 
+                .with_llm(default_llm, llm_selector_rule_key="chatGPT")\
+                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k"), llm_selector_rule_key="chatGPT")\
+                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4"), llm_selector_rule_key="GPT4")\
+                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-32k"), llm_selector_rule_key="GPT4") 
         
         else:
             if default_llm is None:
@@ -287,7 +281,7 @@ class PromptTypes:
         color=LogColors.YELLOW, log_level=logging.INFO)
 
 
-def get_func_return_type(func: callable)->Tuple:
+def get_func_return_type(func: callable, with_args:bool=False)->Union[Type, Tuple[Type, List[Type]]]:
     return_type = func.__annotations__.get("return",None)
     if inspect.iscoroutinefunction(func):
         if return_type:
@@ -304,21 +298,21 @@ def get_func_return_type(func: callable)->Tuple:
         else:
             
             if return_type and issubclass(return_type, Coroutine):
-                return None
+                return None if not with_args else (None, None)
             else:
                 return_type = return_type
     
     if return_type and is_union_type(return_type):
         return_type_args = getattr(return_type, '__args__', None)
         if return_type_args and len(return_type_args) == 2 and return_type_args[1] == type(None):
-            return return_type_args[0]
+            return return_type_args[0] if not with_args else (return_type_args[0], return_type_args)
         else:
             raise Exception(f"Invalid Union annotation {return_type}. Expected Union[ <return_type>, None] or just <return_type>")
     elif is_generic_type(return_type):
         # this should cover list and dict
-        return get_origin(return_type)
+        return get_origin(return_type) if not with_args else (get_origin(return_type), get_args(return_type))
     else:
-        return return_type
+        return return_type if not with_args else (return_type, None)
             
             
 def get_function_docs(func: callable)->Tuple:

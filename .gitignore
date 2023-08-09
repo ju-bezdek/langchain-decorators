@@ -6,4 +6,5 @@ build
 dist
 x_*.py
 x_*.md
+_tmp/
 src/langchain_decorators.egg-info/*
