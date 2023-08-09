@@ -74,6 +74,14 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
         self.result = result
         return result
     
+    @property
+    def function_call_message(self):
+        """ Returns the function call message"""
+        if not self.is_function_call:
+            raise ValueError("Output was not a function call. You can test this with is_function_call property")
+        if self.output_message:
+            return self.output_message
+    
     
     def to_function_message(self, result=None):
         """
@@ -92,7 +100,7 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
         """
         if not function_output:
             if not self.result:
-                raise Exception("The function has not been executed yet, or didn't return a result")
+                self.result = self.execute()
             function_output = self.result
 
         if not isinstance(function_output,str):

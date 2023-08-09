@@ -20,7 +20,7 @@ from .common import *
 from .prompt_template import PromptDecoratorTemplate
 from .output_parsers import *
 from .streaming_context import StreamingContext
-
+from .function_decorator import is_dynamic_llm_func, get_dynamic_function_template_args
 
 def llm_prompt(
         prompt_type:PromptTypeSettings=PromptTypes.UNDEFINED, # do not change the order of this first parameter unless you will change also the fist few lines... since we are handling cases when decorator is used with and without arguments too, than this will be the func
@@ -160,7 +160,7 @@ def llm_prompt(
                 else:
                     prompt_llm = global_settings.default_llm
 
-                if kwargs.get("llm_selector_rule_key"):
+                if "llm_selector_rule_key" in kwargs:
                     llm_selector_rule_key=kwargs["llm_selector_rule_key"]
                     del kwargs["llm_selector_rule_key"]
                 else:
@@ -168,6 +168,7 @@ def llm_prompt(
                 
             else:
                 prompt_llm=llm
+                llm_selector_rule_key=None
                 llm_selector=None # if LLM is explicitly provided, we don't use the selector
                 if capture_stream:
                     if  hasattr(llm,"streaming"):
@@ -229,9 +230,18 @@ def llm_prompt(
                 else:
                     functions=None
 
-                
+            func_args=set()
             if functions:
+                for llm_func in functions:
+                    if is_dynamic_llm_func(llm_func):
+                        required, optional = get_dynamic_function_template_args(llm_func)
+                        func_args.update(required)
+                        func_args.update(optional)
+                        kwargs = validate_and_enrich_kwargs(kwargs, input_variables_source,  memory,required, optional)
+
                 llmChain = LLMDecoratorChainWithFunctionSupport(llm=prompt_llm, prompt=prompt_template,  memory=memory, functions=functions, llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens, llm_selector_rule_key=llm_selector_rule_key )
+
+
             elif isinstance(prompt_template.output_parser, OpenAIFunctionsPydanticOutputParser):
                 function=prompt_template.output_parser.build_llm_function()
                 kwargs["function_call"] = function
@@ -239,11 +249,24 @@ def llm_prompt(
             else:
                 llmChain = LLMDecoratorChain(llm=prompt_llm, prompt=prompt_template,  memory=memory, llm_selector=llm_selector, capture_stream=capture_stream, expected_gen_tokens=expected_gen_tokens, llm_selector_rule_key=llm_selector_rule_key )
             other_supported_kwargs={"stop","callbacks","function_call"}
-            unexpected_inputs = [key for key in kwargs if key not in prompt_template.input_variables and key not in other_supported_kwargs ]
+            unexpected_inputs = [key for key in kwargs if key not in prompt_template.input_variables and key not in other_supported_kwargs and key not in func_args ]
             if unexpected_inputs:
                 raise TypeError(f"Unexpected inputs for prompt function {full_name}: {unexpected_inputs}. \nValid inputs are: {prompt_template.input_variables}\nHint: Make sure that you've used all the inputs in the template")
             
-            missing_inputs = [key for key in prompt_template.input_variables if key not in kwargs ]
+            kwargs = validate_and_enrich_kwargs(kwargs, input_variables_source,  memory,prompt_template.input_variables)
+                
+                
+            
+            if stop_tokens:
+                kwargs["stop"]=stop_tokens
+            call_args = {"inputs":kwargs, "return_only_outputs":True, "callbacks":callbacks}
+           
+            return llmChain, call_args
+
+        def validate_and_enrich_kwargs(kwargs, input_variables_source, memory, required_args, optional_args=None):
+            missing_inputs = [key for key in required_args if key not in kwargs ]
+            if optional_args:
+                missing_inputs.extend([key for key in optional_args if key not in kwargs ])
             if format_instructions_parameter_key in missing_inputs:
                 missing_inputs.remove(format_instructions_parameter_key)
                 kwargs[format_instructions_parameter_key]=None #init the format instructions with None... will be filled later
@@ -256,22 +279,16 @@ def llm_prompt(
                     for key in missing_inputs:
                         value= getattr(input_variables_source, key,missing_value)
                         if value is missing_value:
+                            if optional_args and key in optional_args:
+                                continue
                             raise TypeError(f"Missing a input for prompt function {full_name}: {key}.")
                         else:
                             kwargs[key] = value
-
-
-                        
                 else:
+                    if optional_args and not any((key for key in missing_inputs if key not in optional_args)):
+                        return kwargs
                     raise TypeError(f"{full_name}: missing 1 required keyword-only argument: {missing_inputs}")
-                
-            
-            if stop_tokens:
-                kwargs["stop"]=stop_tokens
-            call_args = {"inputs":kwargs, "return_only_outputs":True, "callbacks":callbacks}
-           
-            return llmChain, call_args
-        
+            return kwargs
         
         
         def get_retry_parse_call_args(prompt_template:PromptDecoratorTemplate, exception:OutputParserExceptionWithOriginal, get_original_prompt:Callable):
@@ -297,7 +314,7 @@ def llm_prompt(
             if llmChain.prompt.output_parser:    
                 if isinstance(llmChain.prompt.output_parser, OpenAIFunctionsPydanticOutputParser):
                     # there is no result probably, but if there is, we ignore it... we are interested only in tha data in function_call_info
-                    result = llmChain.prompt.output_parser.parse(result_data["function_call_info"]["arguments"])
+                    result = llmChain.prompt.output_parser.parse(result_data["function_call_info"]["arguments"]["output"])
                     result_data.pop("function_call_info") # we don't need it anymore, and later in the code we check it its here to create OutputWithFunctionCall
                     result_data.pop("function")
 

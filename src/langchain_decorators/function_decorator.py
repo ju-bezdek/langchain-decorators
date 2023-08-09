@@ -1,12 +1,13 @@
+
 import re
 import inspect
 from enum import Enum
+from string import Formatter
 from functools import wraps
-from typing import Callable,  Union, Type
+from typing import Any, Callable, Dict, List, Set,  Union, Type, Tuple
 from pydantic import BaseModel
-from pydantic.fields import ModelField
-from pydantic.schema import  field_schema
-import copy
+from pydantic.schema import  field_schema, get_flat_models_from_fields, get_model_name_map
+
 
 from .pydantic_helpers import sanitize_pydantic_schema
 from .common import  get_arguments_as_pydantic_fields, get_function_docs, get_function_full_name
@@ -17,11 +18,27 @@ class DocstringsFormat(Enum):
     SPHINX = "sphinx"
     NUMPY = "numpy"
 
-def get_function_schema(func):
+def get_function_schema(func, schema_template_args=None):
     if callable(func) and hasattr(func,"get_function_schema"):
-        return func.get_function_schema(func)
+        return func.get_function_schema(func, schema_template_args)
     else:
-        return None
+        raise ValueError(f"Invalid item value in functions. Unable to retrieve schema from function {f}")
+
+
+def is_dynamic_llm_func(func):
+    if callable(func) and hasattr(func,"get_function_schema"):
+        return getattr(func,"is_dynamic",False)
+
+def get_dynamic_function_template_args(func:Callable)->Tuple[List[str],List[str]]:
+    """ 
+    returns tuple of (required_args:List[str], optional_args:List[str]) 
+    """
+    func_docs = get_function_docs(func)
+    if not func_docs:
+        raise ValueError(f"LLM Function {get_function_full_name(func)} has no docstring")
+    
+    return get_template_args(func_docs)
+
 
 
 def llm_function(
@@ -29,6 +46,7 @@ def llm_function(
         validate_docstrings:bool=True,
         docstring_format:str="auto",
         arguments_schema:Type[BaseModel]=None,
+        dynamic_schema:bool=False,
         **kwargs
         ):
     """
@@ -114,16 +132,29 @@ def llm_function(
     else:
         func = None
 
-
-    def get_function_schema(_func, _validate_docstrings=validate_docstrings):
-            return build_func_schema(_func, 
-                                            function_name = function_name, 
-                                            format=docstring_format, 
-                                            validate_docstrings=_validate_docstrings,
-                                            arguments_schema=arguments_schema
-                                          )
+   
     
     def decorator(func):
+
+        if dynamic_schema: 
+            def get_function_schema(_func, schema_template_args):
+                return build_func_schema(_func, 
+                                                function_name = function_name, 
+                                                format=docstring_format, 
+                                                validate_docstrings=validate_docstrings,
+                                                arguments_schema=arguments_schema,
+                                                schema_template_parameters=schema_template_args,
+                                            )
+        else:
+            func_schema =  build_func_schema(func, 
+                                                function_name = function_name, 
+                                                format=docstring_format, 
+                                                validate_docstrings=validate_docstrings,
+                                                arguments_schema=arguments_schema,
+                                                schema_template_parameters=None,
+                                            )
+            def get_function_schema(_func, schema_template_args=None):
+                return func_schema
         
         is_async = inspect.iscoroutinefunction(func)
 
@@ -142,6 +173,9 @@ def llm_function(
        
 
         func_wrapper.get_function_schema=get_function_schema
+        func_wrapper.is_dynamic = dynamic_schema
+        func_wrapper.function_name = function_name or func.__name__
+
         return func_wrapper
     
     if func:
@@ -162,22 +196,23 @@ class LllFunctionWithModifiedSchema:
     def get_function_schema(self):
         return self._function_schema
         
-         
-
-
 
 def build_func_schema(
         func:Callable, 
         function_name:str=None, 
         format:Union[DocstringsFormat,str]="auto", 
         validate_docstrings:bool=True,
-        arguments_schema:Type[BaseModel]=None
+        arguments_schema:Type[BaseModel]=None,
+        schema_template_parameters:Dict[str,Any]=None,
         ):
     
     if isinstance(format,str):
         format = DocstringsFormat(format)
 
     func_docs = get_function_docs(func)  
+
+    if schema_template_parameters:
+        func_docs = format_str_extra(func_docs, **schema_template_parameters)
 
     if function_name and not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", function_name):
         raise ValueError(f"Invalid function name: {function_name} for {get_function_full_name(func)}. Only letters, numbers and underscores are allowed. The name must start with a letter or an underscore.")
@@ -213,7 +248,7 @@ def build_func_schema(
                         if not_documented:
                             errs.append(f"Missing (not documented): {not_documented}")
                         
-                        raise ValueError("Docstrings parameters do not match function signature. "+errs.join(", "))
+                        raise ValueError("Docstrings parameters do not match function signature. "+ ",".join(errs))
                 
                 for arg_name, arg_model_field in arguments_fields.items():
                     arg_docs = docsctrings_param_description.get(arg_name)
@@ -230,9 +265,14 @@ def build_func_schema(
             "required":[]
 
         }
+
+        flat_models = get_flat_models_from_fields(arguments_fields.values(), set())
+        model_name_map = get_model_name_map(flat_models)
         for arg_name, arg_model_field in arguments_fields.items():
-            param_schema, _ , nested_models_schema = field_schema(arg_model_field, model_name_map={}) 
-            
+                
+            param_schema, ref_schema , nested_models_schema = field_schema(arg_model_field, model_name_map=model_name_map) 
+            if "$ref" in param_schema:
+                param_schema = next(iter(ref_schema.values()))
             if nested_models_schema:
                 raise NotImplementedError("Nested models are not supported yet")
             
@@ -260,11 +300,46 @@ def build_func_schema(
             
 
 
+def format_str_extra(template:str, **kwargs):
+    optional_blocks_regex = list(re.finditer(r"\{\?(?P<optional_partial>.+?)(?=\?\})\?\}", template, re.MULTILINE | re.DOTALL))
+    for optional_block in optional_blocks_regex:
+            optional_partial = optional_block.group("optional_partial")
+            partial_input_variables = {v for _, v, _, _ in Formatter().parse(optional_partial) if v is not None}
+            
+            if not partial_input_variables:
+                raise ValueError(f"Optional partial {optional_partial} does not contain any optional variables. Didn't you forget to wrap your parameter in {{}}?")
+            
+            if not all(kwargs.get(v) for v in partial_input_variables):
+                # all variables are provided, we can remove the optional block
+                template = template.replace(optional_block.group(0), "")
+            else:
+                optional_partial = optional_block.group("optional_partial")
+                template = template.replace(optional_block.group(0),optional_partial )
+             
+    return Formatter().format(template, **kwargs)
+     
 
-        
+def get_template_args(template:str)->Tuple[List[str],List[str]]:
+    """ returns tuple of (required_args:List[str], optional_args:List[str]) """
+    optional_args=set()
+    optional_blocks_regex = list(re.finditer(r"\{\?(?P<optional_partial>.+?)(?=\?\})\?\}", template, re.MULTILINE | re.DOTALL))
+    for optional_block in optional_blocks_regex:
+            optional_partial = optional_block.group("optional_partial")
+            partial_input_variables = {v for _, v, _, _ in Formatter().parse(optional_partial) if v is not None}
+            optional_args.update(partial_input_variables)
+            if not partial_input_variables:
+                raise ValueError(f"Optional partial {optional_partial} does not contain any optional variables. Didn't you forget to wrap your parameter in {{}}?")
+            
+            
+            # replace optional block with underscore so it wont be parsed for required args
+            template = template.replace(optional_block.group(0), "_")
+
+             
+    required_args = {v for _, v, _, _ in Formatter().parse(template) if v is not None}
+    return required_args, optional_args
 
 
-        
+
 def parse_function_description_from_docstrings(docstring:str)->str:
     # we will return first text until first empty line
     

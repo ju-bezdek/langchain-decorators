@@ -47,6 +47,7 @@ write_me_short_post(topic="starwars", platform="redit")
 - [Output parsers](#output-parsers)
 
 [LLM functions (OpenAI functions)](#llm-functions)
+-  [Dynamic function schemas](#dynamic-function-schemas)
 
 [Simplified streaming](#simplified-streaming)
 
@@ -346,8 +347,39 @@ print(f_schema)
 In order to add the result to memory / agent_scratchpad you can use `to_function_message` to generate an FunctionMessage that LLM will interpret as a Tool/Function result
 
 
+## Functions provider
+
+Functions provider enables you to provide set of llm functions more dynamically, for example list of functions - based on the input.
+It also enables you to give a unique name to each function for this LLM run. This might be useful for two reasons:
+- avoid naming conflicts, if you are combining multiple general purpose functions
+- further guidance/hinting of LLM model
 
 
+## Dynamic function schemas
+
+Function schemas (and especially their descriptions) are crucial tools to guide LLM. If you enable dynamic function declaration, you can (re)use the same prompt attributes for the main prompt also in the llm_function scheme:
+
+```python
+
+@llm_function(dynamic_schema=True)
+def db_search(query_input:str):
+    """
+    This function is useful to search in our database.
+    {?Here are some examples of data available:
+    {closest_examples}?}
+    """
+
+@llm_prompt
+def run_agent(query_input:str, closest_examples:str, functions):
+    """
+    Help user. Use a function when appropriate
+    """
+
+closest_examples = get_closest_examples()
+run_agent(query_input, closest_examples, functions=[db_search, ...])
+```
+
+this is just for illustration, fully executable example is available [here, in code examples](code_examples/dynamic_function_schema.py)
 
 
 # Simplified streaming
