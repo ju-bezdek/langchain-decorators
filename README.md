@@ -47,6 +47,7 @@ write_me_short_post(topic="starwars", platform="redit")
 - [Output parsers](#output-parsers)
 
 [LLM functions (OpenAI functions)](#llm-functions)
+-  [Functions provider](#functions-provider)
 -  [Dynamic function schemas](#dynamic-function-schemas)
 
 [Simplified streaming](#simplified-streaming)

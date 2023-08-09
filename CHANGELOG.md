@@ -48,7 +48,13 @@
 - option to set the expected generated token count as a hint for LLM selector
 - add argument schema option for llm_function
 
-## Version 0.0.12 (2023-07-9)
+## Version 0.0.12 (2023-07-09)
 New parameters in llm decorator
 - support for `llm_selector_rule_key` to sub selection of LLM's to for consideration during selection. This enables you to enforce pick only some models (like GPT4 for instance) for particular prompts, or even for particular runs
 - support for `function_source` and `memory_source` to point pick properties/attributes of the instance prompt is bound to (aka `self`) as source of functions and memories, so we wont need to send pass it in every time
+
+
+## Version 0.1.0 (2023-08-09)
+- Support for dynamic function schema, that allows augment the function schema dynamically based on the input [more here](./README.MD#dynamic-function-schemas)
+- Support Functions provider, that allows control function/tool selection that will be fed into LLM [more here](./README.MD#functions-provider)
+- Minor fix for JSON output parser for array scenarios
