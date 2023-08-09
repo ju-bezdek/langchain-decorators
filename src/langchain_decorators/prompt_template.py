@@ -97,9 +97,9 @@ def build_template_drafts(template:str, format:str, role:str=None )->PromptTempl
         for partial_name, (partial, partial_input_variables) in partials_with_params.items():
             # create function that will render the partial if all the input variables are present. Otherwise, it will return an empty string... 
             # it needs to be unique for each partial, since we check only for the variables that are present in the partial
-            def partial_formatter(inputs, _partial=partial):
+            def partial_formatter(inputs, _partial=partial, _partial_input_variables=partial_input_variables):
                 """ This will render the partial if all the input variables are present. Otherwise, it will return an empty string."""
-                missing_param = next((param for param in partial_input_variables if param not in inputs or not inputs[param]), None)
+                missing_param = next((param for param in _partial_input_variables if param not in inputs or not inputs[param]), None)
                 if missing_param:
                     return ""
                 else:
@@ -219,7 +219,17 @@ class PromptDecoratorTemplate(StringPromptTemplate):
             elif return_type==dict:
                 output_parser = "json"
             elif return_type==list:
+                _, args = get_func_return_type(func, with_args=True)
                 output_parser = "list"
+                if args:
+                    if issubclass(args[0],BaseModel):
+                        output_parser = "pydantic"
+                    elif issubclass(args[0],dict):
+                        output_parser = "json"
+                    elif issubclass(args[0],str):
+                        output_parser = "list"
+                    else:
+                        raise Exception(f"Unsupported item type in annotation of {template_name} -> {return_type}[{args}]")
             elif return_type==bool:
                 output_parser = "boolean"
             elif issubclass(return_type, OutputWithFunctionCall):

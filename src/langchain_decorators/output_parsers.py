@@ -85,7 +85,7 @@ class JsonOutputParser(BaseOutputParser):
     def parse(self, text: str) -> List[str]:
         try:
             # Greedy search for 1st json candidate.
-            match = re.search(r"\{.*\}", text.strip(),
+            match = re.search(r"(\[\s*)?\{.*\}(\s*\])?", text.strip(),
                               re.MULTILINE | re.IGNORECASE | re.DOTALL)
             json_str = ""
             if match:
