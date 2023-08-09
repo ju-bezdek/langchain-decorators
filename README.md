@@ -59,6 +59,8 @@ write_me_short_post(topic="starwars", platform="redit")
 
 [Defining custom settings](#defining-custom-settings)
 
+[Debugging](#debugging)
+
 [Passing a memory, callback, stop etc.](#passing-a-memory-callback-stop-etc)
 
 
@@ -616,6 +618,30 @@ async def write_me_short_post(topic:str, platform:str="twitter", memory:SimpleMe
 await write_me_short_post(topic="old movies")
 
 ```
+
+# Debugging
+
+## Logging to console
+There are several options how to control the outputs logged into console.
+The easiest way is to define ENV variable: `LANGCHAIN_DECORATORS_VERBOSE` and set it to "true"
+
+You can control this also programmatically by defining you global settings as shown [here](#defining-custom-settings)
+
+The last option is to control it per each case, simply by turing on verbose mode on prompt:
+```
+@llm_prompt(verbose=True)
+def your_prompt(param1):
+  ...
+```
+
+## Using PromptWatch.io
+PromptWatch io is a platform to track and trace details about everything that is going on in langchain executions. 
+It allows a single line drop in integration, just by wrapping your entry point code in 
+```
+with PromptWatch():
+    run_your_code()
+```
+Learn more about PromptWatch here: [www.promptwatch.io](https://www.promptwatch.io)
 
 
 # Other
