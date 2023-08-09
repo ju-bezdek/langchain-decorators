@@ -49,8 +49,10 @@ def get_file_retriever(file_path):
     else:
         return FAISS.load_local(file_name+".faiss", OpenAIEmbeddings()).as_retriever()
 
-
 ################################################################################################################
+serp_api_search = SerpAPIWrapper()
+
+
 
 # lets fetch some example data
 retriever = get_file_retriever("https://raw.githubusercontent.com/langchain-ai/langchain/7de6a1b78e9e86ebe7ee99c3194cfd97022ce789/docs/extras/modules/state_of_the_union.txt", "_tmp")
@@ -72,7 +74,7 @@ def search_in_files(input:str):
 
 
 # LLM would likely choose internet search function, because its more likely that you would find something about state policy on the internet
-serp_api_search = SerpAPIWrapper()
+
 @llm_function
 def internet_search(query_input:str):
     """
