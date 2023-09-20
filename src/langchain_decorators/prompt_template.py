@@ -51,7 +51,7 @@ class OpenAITemplateBuilder:
             return PromptTemplate.from_template(template_string)
         else:
             message_templates=[]
-            for prompt_block_name,template_string in template_parts:
+            for template_string, prompt_block_name in template_parts:
                 template_string=template_string.strip()
                 content_template= PromptTemplate.from_template(template_string)
                 if prompt_block_name=="placeholder":
