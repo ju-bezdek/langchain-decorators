@@ -2,12 +2,11 @@
 import logging
 import re
 import inspect
-
+from abc import ABC, abstractmethod
 from string import Formatter
 
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Union
 
-from pydantic import BaseModel
 
 from textwrap import dedent
 
@@ -22,9 +21,68 @@ from .common import LogColors, PromptTypeSettings, get_func_return_type, get_fun
 from .output_parsers import *
 
 
+
+import pydantic
+if pydantic.__version__ <"2.0.0":
+    from pydantic import BaseModel
+else:
+    from pydantic.v1 import BaseModel
+
+
+class BaseTemplateBuilder(ABC):
+
+    @abstractmethod
+    def build_template(self, template_parts:List[Tuple[str,str]],kwargs:Dict[str,Any])->PromptTemplate:
+        """ Function that builds a prompt template from a template string and the prompt block name (which is the the part of ```<prompt:$prompt_block_name> in the decorated function docstring)
+
+        Args:
+            template_parts (List[Tuple[str,str]]): list of prompt parts List[(prompt_block_name, template_string)]
+            kwargs (Dict[str,Any]): all arguments passed to the decorated function
+
+        Returns:
+            PromptTemplate: ChatPromptTemplate or StringPromptTemplate
+        """
+        pass
+
+class OpenAITemplateBuilder:
+
+    def build_template(self, template_parts:List[Tuple[str,str]],kwargs:Dict[str,Any])->PromptTemplate:
+        if len(template_parts)==1 and not template_parts[0][1]:
+            return PromptTemplate.from_template(template_string)
+        else:
+            message_templates=[]
+            for prompt_block_name,template_string in template_parts:
+                template_string=template_string.strip()
+                content_template= PromptTemplate.from_template(template_string)
+                if prompt_block_name=="placeholder":
+                    message_templates.append(MessagesPlaceholder(variable_name=template_string.strip(" {}")))
+                elif prompt_block_name:
+                    
+                    if "[" in prompt_block_name and  prompt_block_name[-1]=="]":
+                        i = prompt_block_name.find("[")
+                        name = prompt_block_name[i+1:-1]
+                        role=prompt_block_name[:i]
+                    else:
+                        name=None
+                        role=prompt_block_name
+
+                    if name:
+                        additional_kwargs={"name":name}
+                    elif role == "function":
+                        raise Exception(f"Invalid function prompt block. function_name {name} is not set. Use this format: <prompt:function[function_name]>")
+                    else:
+                        additional_kwargs={}
+                    
+                    message_templates.append(ChatMessagePromptTemplate(role=role,prompt=content_template,additional_kwargs=additional_kwargs))
+            return ChatPromptTemplate(messages=message_templates)
+            
+            
+
+
+
 def parse_prompts_from_docs(docs:str):
     prompts = []
-    for i, prompt_block in enumerate(re.finditer(r"```[^\S\n]*<prompt(?P<role>:\w+)?>\n(?P<prompt>.*?)\n```[ |\t]*\n", docs, re.MULTILINE | re.DOTALL)):
+    for i, prompt_block in enumerate(re.finditer(r"```[^\S\n]*<prompt(?P<role>:[\w| |\[|\]]+)?>\n(?P<prompt>.*?)\n```[ |\t\n]*", docs, re.MULTILINE | re.DOTALL)):
         role = prompt_block.group("role")
         prompt = prompt_block.group("prompt")
         # remove \ escape before ```
@@ -52,7 +110,7 @@ class PromptTemplateDraft(BaseModel):
 
     def finalize_template(self, input_variable_values:dict)->Union[MessagesPlaceholder, ChatMessagePromptTemplate, StringPromptTemplate]:
         if self.role=="placeholder":
-            return MessagesPlaceholder(variable_name=self.input_variables[0])
+            return self.template
         else:
             final_template_string = self.template
             if self.partial_variables_builders:
@@ -60,13 +118,8 @@ class PromptTemplateDraft(BaseModel):
                 for final_partial_key, partial_builder in self.partial_variables_builders.items():
                     final_partial_value = partial_builder(input_variable_values)
                     final_template_string=final_template_string.replace(f"{{{final_partial_key}}}",final_partial_value)
-        
-            final_template_string=final_template_string.strip()
-            content_template= PromptTemplate.from_template(final_template_string)
-            if self.role:
-                return ChatMessagePromptTemplate(role=self.role,prompt=content_template)
-            else:
-                return content_template
+            
+            return final_template_string
             
 
 def build_template_drafts(template:str, format:str, role:str=None )->PromptTemplateDraft:
@@ -134,12 +187,11 @@ class PromptDecoratorTemplate(StringPromptTemplate):
     template_name:str
     template_format:str
     optional_variables:List[str]
-    optional_variables_none_behavior:str
     default_values:Dict[str,Any]
     format_instructions_parameter_key:str
     template_version:str=None
     prompt_type:PromptTypeSettings = None
-
+    original_kwargs:dict=None
     
 
     
@@ -151,11 +203,11 @@ class PromptDecoratorTemplate(StringPromptTemplate):
               template_format:str="f-string-extra", 
               output_parser:Union[None, BaseOutputParser]=None, 
               optional_variables:Optional[List[str]]=None,
-              optional_variables_none_behavior:str="skip_line", 
               default_values:Optional[Dict[str,Any]]=None,
               format_instructions_parameter_key:str="FORMAT_INSTRUCTIONS",
               template_version:str=None,
-              prompt_type:PromptTypeSettings = None
+              prompt_type:PromptTypeSettings = None,
+              original_kwargs:dict=None
             )->"PromptDecoratorTemplate":
             
         if template_format not in ["f-string","f-string-extra"]:
@@ -192,10 +244,10 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                 template_string=template_string,
                 template_format=template_format,
                 optional_variables=optional_variables,
-                optional_variables_none_behavior=optional_variables_none_behavior,
                 default_values=default_values,
                 format_instructions_parameter_key=format_instructions_parameter_key,
-                prompt_type=prompt_type
+                prompt_type=prompt_type,
+                original_kwargs=original_kwargs
             )
         
     @classmethod 
@@ -206,7 +258,8 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                   output_parser:Union[str,None, BaseOutputParser]="auto", 
                   template_format:str = "f-string-extra",
                   format_instructions_parameter_key:str="FORMAT_INSTRUCTIONS",
-                  prompt_type:PromptTypeSettings = None
+                  prompt_type:PromptTypeSettings = None,
+                  original_kwargs:dict=None
                   )->"PromptDecoratorTemplate":
         
         template_string = get_function_docs(func)  
@@ -284,13 +337,15 @@ class PromptDecoratorTemplate(StringPromptTemplate):
             optional_variables=[*default_values.keys()],
             default_values=default_values,
             format_instructions_parameter_key=format_instructions_parameter_key,
-            prompt_type=prompt_type
+            prompt_type=prompt_type,
+            original_kwargs=original_kwargs
         )
 
 
     def get_final_template(self, **kwargs: Any)->PromptTemplate:
         """Create Chat Messages."""
         
+        prompt_type = self.prompt_type or PromptTypeSettings()
         
         if self.default_values:
             # if we have default values, we will use them to fill in missing values
@@ -298,17 +353,20 @@ class PromptDecoratorTemplate(StringPromptTemplate):
 
         kwargs = {k:v for k,v in kwargs.items() if v is not None}
 
+        parts=[]
         if isinstance(self.prompt_template_drafts,list):
-            message_templates=[]
+            
             for message_draft in self.prompt_template_drafts:
-                msg_template = message_draft.finalize_template(kwargs)
+                msg_template_final_str = message_draft.finalize_template(kwargs)
                 
-                message_templates.append(msg_template)
+                parts.append((msg_template_final_str,message_draft.role))
 
-            template = ChatPromptTemplate(messages=message_templates, output_parser=self.output_parser)
         else:
-            template = self.prompt_template_drafts.finalize_template(kwargs)
-            template.output_parser = self.output_parser
+            msg_template_final_str = self.prompt_template_drafts.finalize_template(kwargs)
+            parts.append((msg_template_final_str,""))
+        
+        template = prompt_type.prompt_template_builder.build_template(parts, kwargs)
+        template.output_parser = self.output_parser
             
             
         register_prompt_template(self.template_name, template, self.template_version)

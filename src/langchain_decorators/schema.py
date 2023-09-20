@@ -1,11 +1,15 @@
 import asyncio
 import logging
-import re
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar, Union
-from pydantic import BaseModel
 from langchain.schema import AIMessage
 from langchain.schema import FunctionMessage
 import json
+
+import pydantic
+if pydantic.__version__ <"2.0.0":
+    from pydantic import BaseModel, PrivateAttr
+else:
+    from pydantic.v1 import BaseModel, PrivateAttr
 
 
 
@@ -20,6 +24,7 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
     function:Callable = None
     function_async:Callable = None
     result: Any = None
+    _result_generated = PrivateAttr(False)
     
     @property
     def is_function_call(self):
@@ -38,16 +43,14 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
         if not (self.function or self.function_async):
             raise ValueError("No function to execute")
         if self.function_async:
-            if isinstance(self.function_arguments, dict):
-                result= await self.function_async(**self.function_arguments)
-            else:
-                result= await self.function_async(self.function_arguments)
+            result= await self.function_async(**(self.function_arguments or {}))
         else:
-            await asyncio.sleep(0)
-            result= self.function(**self.function_arguments)
+            result= self.function(**(self.function_arguments or {}))
             if result and asyncio.iscoroutine(result):
                 # this handles special scenario when fake @llm_function is used
                 result = await result
+        self.result = result
+        self._result_generated=True
         return result
         
     def execute(self):
@@ -57,23 +60,22 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
         if not (self.function or self.function_async):
             raise ValueError("No function to execute")
         if self.function:
-            if isinstance(self.function_arguments, dict):
-                result= self.function(**self.function_arguments)
-            else:
-                result=self.function(self.function_arguments)
-        
+            result= self.function(**(self.function_arguments or {}))
         else:
             try:
                 current_loop = asyncio.get_running_loop()
             except RuntimeError:
                 current_loop = None
             if current_loop:
-                result= current_loop.run_until_complete(self.function_async(**self.function_arguments))
+                raise RuntimeError("Cannot execute async function synchronously. Please use execute_async() instead.",)
             else:
+                logging.warning("Executing async function synchronously. This is not recommended. Consider using execute_async() instead.")
                 result= asyncio.run(self.function_async(**self.function_arguments))
         self.result = result
+        self._result_generated=True
         return result
     
+
     @property
     def function_call_message(self):
         """ Returns the function call message"""
@@ -99,8 +101,12 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
             function_output (Any, optional): function output. If None, it the result collected via execute() or execute_async() will be used. (One of them must be called before).
         """
         if not function_output:
-            if not self.result:
-                self.result = self.execute()
+            if not self._result_generated:
+                try:
+                    self.result = self.execute()
+                except RuntimeError as e:
+                    if "Cannot execute async function synchronously." in str(e):
+                        raise RuntimeError("Cannot execute async function synchronously. Please use await execute_async() to generate the output of the function first") from e
             function_output = self.result
 
         if not isinstance(function_output,str):

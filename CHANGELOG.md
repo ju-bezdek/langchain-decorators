@@ -58,3 +58,9 @@ New parameters in llm decorator
 - Support for dynamic function schema, that allows augment the function schema dynamically based on the input [more here](./README.MD#dynamic-function-schemas)
 - Support Functions provider, that allows control function/tool selection that will be fed into LLM [more here](./README.MD#functions-provider)
 - Minor fix for JSON output parser for array scenarios
+
+## Version 0.2.0 (2023-09-20)
+- Support for custom template building, to support any kind of prompt block types (https://github.com/ju-bezdek/langchain-decorators/issues/5)
+- Support for retrieving a chain object with preconfigured kwargs for more convenient use with the rest of LangChain ecosystem
+- support for followup handle for convenient simple followup to response without using a history object
+- hotfix support for pydantic v2

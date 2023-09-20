@@ -1,7 +1,15 @@
 
-from typing import Type
-from pydantic import BaseModel, ValidationError
-from pydantic.fields import ModelField
+from typing import Type, get_origin
+
+
+
+import pydantic
+if pydantic.__version__ <"2.0.0":
+    from pydantic import BaseModel, ValidationError
+    from pydantic.fields import ModelField
+else:
+    from pydantic.v1 import BaseModel, ValidationError
+    from pydantic.v1.fields import ModelField
 
 
 
@@ -57,7 +65,8 @@ def align_fields_with_model( data:dict, model:Type[BaseModel]) -> dict:
                 value=data_with_compressed_keys[compressed_key]
         
         if isinstance(value, dict):
-            if field_info.type_ and issubclass(field_info.type_, BaseModel):
+            field_type = get_origin(field_info.type_) if field_info.type_ else None
+            if field_info.type_ and isinstance(field_type,type) and issubclass(field_type, BaseModel):
                 value = align_fields_with_model(value, field_info.type_)
         elif isinstance(value, list):
             value = [align_fields_with_model(item, field_info.type_) for item in value]
@@ -92,6 +101,10 @@ def sanitize_pydantic_schema(schema:dict):
                                 ref = v["items"].get("$ref")
                                 if  ref:
                                     v["items"]=definitions[ref.split("/")[-1]]
+                if schema.get("items") and schema["items"].get("$ref"):
+                    ref=schema["items"]["$ref"]
+                    ref_key = ref.split("/")[-1]
+                    schema["items"]= definitions.get(ref_key)
 
         replace_refs_recursive(schema)
     return schema

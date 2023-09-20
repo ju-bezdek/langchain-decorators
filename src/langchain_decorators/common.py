@@ -5,17 +5,29 @@ import json
 import logging
 import os
 from textwrap import dedent
+from langchain import PromptTemplate
 import yaml
 from enum import Enum
-from typing import Any, Coroutine, Dict, List, Type, Union, Optional, Tuple, get_args, get_origin
-from pydantic import BaseConfig, BaseModel, Extra, Field
-from pydantic.fields import ModelField
+from typing import Any, Coroutine, Dict, List, Type, Union, Optional, Tuple, get_args, get_origin, TYPE_CHECKING
 from langchain.llms.base import BaseLanguageModel
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import BaseMessage
+from langchain.prompts.chat import ChatMessagePromptTemplate
 from typing_inspect import is_generic_type, is_union_type
 
+import pydantic
 
+
+
+if pydantic.__version__ <"2.0.0":
+    from pydantic import BaseConfig, BaseModel, Extra, Field
+    from pydantic.fields import ModelField
+else:
+    from pydantic.v1 import BaseConfig, BaseModel, Extra, Field
+    from pydantic.v1.fields import ModelField
+    
+if TYPE_CHECKING:
+    from .prompt_template import BaseTemplateBuilder
 
 
 class LlmSelector(BaseModel):
@@ -87,16 +99,21 @@ class LlmSelector(BaseModel):
             result_index = 0
         else:
             total_tokens = self.get_expected_total_tokens(prompt, function_schemas=function_schemas, estimate=False, expected_generated_tokens=expected_generated_tokens) 
+            key_match=False
             for i, rule in enumerate(self.rules):
                 if llm_selector_rule_key:
                     if rule.get("llm_selector_rule_key") != llm_selector_rule_key:
                         continue
+                    else:
+                        key_match=True
                 max_tokens = rule.get("max_tokens")
                 if max_tokens and max_tokens >=total_tokens:
                     result_index = i
                     break
-
+                
             # if no condition is met, return the last llm
+            if llm_selector_rule_key and not key_match:
+                raise Exception(f"Could not find a LLM for key {llm_selector_rule_key}. Valid keys are: {set([rule.get('llm_selector_rule_key') for rule in self.rules])}")
             result_index = i
         print_log(f"LLMSelector: Using {'default' if result_index==0 else str(result_index)+'-th'} LLM: {getattr(self.llms[result_index],'model_name', self.llms[result_index].__class__.__name__)}", logging.DEBUG )
         if streaming:
@@ -126,8 +143,6 @@ class LlmSelector(BaseModel):
             num_tokens += self.get_token_count(json.dumps(function_schemas), estimate=estimate)
         return num_tokens
     
-
-
 
 
 class GlobalSettings(BaseModel):
@@ -169,7 +184,7 @@ class GlobalSettings(BaseModel):
                 .with_llm(default_llm, llm_selector_rule_key="chatGPT")\
                 .with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k"), llm_selector_rule_key="chatGPT")\
                 .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4"), llm_selector_rule_key="GPT4")\
-                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-32k"), llm_selector_rule_key="GPT4") 
+                #.with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-32k"), llm_selector_rule_key="GPT4") 
         
         else:
             if default_llm is None:
@@ -242,7 +257,13 @@ def print_log(log_object: Any, log_level: int, color: LogColors = None):
 
 
 class PromptTypeSettings:
-    def __init__(self, llm: BaseLanguageModel = None,  color: LogColors = None, log_level: Union[int, str] = "info", capture_stream: bool = False, llm_selector: "LlmSelector" = None):
+    def __init__(self, 
+                 llm: BaseLanguageModel = None,  
+                 color: LogColors = None, 
+                 log_level: Union[int, str] = "info", 
+                 capture_stream: bool = False, 
+                 llm_selector: "LlmSelector" = None, 
+                 prompt_template_builder: "BaseTemplateBuilder" = None):
         self.color = color
         if isinstance(log_level, str):
             log_level = getattr(logging, log_level.upper())
@@ -250,10 +271,22 @@ class PromptTypeSettings:
         self.capture_stream = capture_stream
         self.llm = llm
         self.llm_selector = llm_selector
+        
+        self._prompt_template_builder = prompt_template_builder 
+
     
+    @property
+    def prompt_template_builder(self):
+        # lazy init due to circular imports
+        if not self._prompt_template_builder:
+            from .prompt_template import OpenAITemplateBuilder
+            self._prompt_template_builder= OpenAITemplateBuilder()
+        return self._prompt_template_builder
+            
+
 
     def as_verbose(self):
-        return PromptTypeSettings(llm=self.llm, color=self.color, log_level=100, capture_stream=self.capture_stream)
+        return PromptTypeSettings(llm=self.llm, color=self.color, log_level=100, capture_stream=self.capture_stream, llm_selector=self.llm_selector, prompt_template_builder=self.prompt_template_builder)
 
 
 class PromptTypes:
@@ -337,7 +370,7 @@ def get_arguments_as_pydantic_fields(func) -> Dict[str, ModelField]:
     argument_types = {}
     model_config = BaseConfig()
     for arg_name, arg_desc in inspect.signature(func).parameters.items():
-        if arg_name != "self":
+        if arg_name != "self" and not (arg_name.startswith("_") and arg_desc.default!=inspect.Parameter.empty):
             default = arg_desc.default if arg_desc.default!=inspect.Parameter.empty else None
             if arg_desc.annotation==inspect._empty:
                 raise Exception(f"Argument '{arg_name}' of function {func.__name__} has no type annotation")

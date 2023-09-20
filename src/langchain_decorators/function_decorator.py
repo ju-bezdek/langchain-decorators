@@ -4,9 +4,15 @@ import inspect
 from enum import Enum
 from string import Formatter
 from functools import wraps
-from typing import Any, Callable, Dict, List, Set,  Union, Type, Tuple
-from pydantic import BaseModel
-from pydantic.schema import  field_schema, get_flat_models_from_fields, get_model_name_map
+from typing import Any, Callable, Dict, List, Set,  Union, Type, Tuple, get_args, get_origin
+
+import pydantic
+if pydantic.__version__ <"2.0.0":
+    from pydantic import BaseModel
+    from pydantic.schema import  field_schema, get_flat_models_from_fields, get_model_name_map, add_field_type_to_schema
+else:
+    from pydantic.v1 import BaseModel
+    from pydantic.v1.schema import  field_schema, get_flat_models_from_fields, get_model_name_map, add_field_type_to_schema
 
 
 from .pydantic_helpers import sanitize_pydantic_schema
@@ -45,7 +51,7 @@ def llm_function(
         function_name:str=None,
         validate_docstrings:bool=True,
         docstring_format:str="auto",
-        arguments_schema:Type[BaseModel]=None,
+        arguments_schema:Union[Type[BaseModel], Type[List[Any]]]=None,
         dynamic_schema:bool=False,
         **kwargs
         ):
@@ -202,7 +208,7 @@ def build_func_schema(
         function_name:str=None, 
         format:Union[DocstringsFormat,str]="auto", 
         validate_docstrings:bool=True,
-        arguments_schema:Type[BaseModel]=None,
+        arguments_schema:Union[Type[BaseModel], Type[List[Any]], None] = None,
         schema_template_parameters:Dict[str,Any]=None,
         ):
     
@@ -220,23 +226,36 @@ def build_func_schema(
     func_name =  function_name or func.__name__
     args_schema = None
     
-    if arguments_schema:
+    if arguments_schema and isinstance(arguments_schema,Type):
         args_schema = arguments_schema.schema()
         sanitize_pydantic_schema(args_schema)
         args_schema={
             "type":"object",
-            "properties":args_schema["properties"],
+            "properties": args_schema["properties"],
             "required":args_schema["required"]
         }
+    elif arguments_schema and isinstance(arguments_schema,dict):
+        if "properties" in arguments_schema:
+            sanitize_pydantic_schema(arguments_schema)  
+            #arguments schema is a OPENAPI schema
+            args_schema = arguments_schema
+        elif any((v for v in arguments_schema.values() if isinstance(v,str))):
+            #arguments schema is a dict of types
+            args_schema = {
+                "type":"object",
+                "properties":{k:{'title': k, 'description': v, 'type': 'string'} for k,v in arguments_schema.items()},
+                "required":[k for k,v in arguments_schema.items() if v is not None]
+            }
+        else:
+            raise ValueError("Invalid arguments_schema... it must be a BaseModel type, a dict describing OPENAPI schema or a dict of of fields with descriptions as values")
     else:
-
         arguments_fields = get_arguments_as_pydantic_fields(func)
-
+        
         if func_docs:
-            docsctrings_param_description = find_and_parse_params_from_docstrings(func_docs,format=format)
-            if docsctrings_param_description:
+            docstrings_param_description = find_and_parse_params_from_docstrings(func_docs,format=format)
+            if docstrings_param_description:
                 if validate_docstrings:
-                    documented_params=set(docsctrings_param_description.keys()) 
+                    documented_params=set(docstrings_param_description.keys()) 
                     implemented_params= set(arguments_fields.keys())
                     not_implemented = documented_params - implemented_params  # Set difference: keys in set1 but not in set2
                     not_documented = implemented_params - documented_params  # Set difference: keys in set2 but not in set1
@@ -248,10 +267,10 @@ def build_func_schema(
                         if not_documented:
                             errs.append(f"Missing (not documented): {not_documented}")
                         
-                        raise ValueError("Docstrings parameters do not match function signature. "+ ",".join(errs))
+                        raise ValueError(f"Docstrings parameters do not match function {func.__module__}.{func.__name__} signature. "+ ",".join(errs))
                 
                 for arg_name, arg_model_field in arguments_fields.items():
-                    arg_docs = docsctrings_param_description.get(arg_name)
+                    arg_docs = docstrings_param_description.get(arg_name)
                     if arg_docs:
                         
                         arg_model_field.field_info.description =arg_docs["description"]
@@ -263,7 +282,6 @@ def build_func_schema(
             "type":"object",
             "properties":{},
             "required":[]
-
         }
 
         flat_models = get_flat_models_from_fields(arguments_fields.values(), set())
@@ -272,7 +290,12 @@ def build_func_schema(
                 
             param_schema, ref_schema , nested_models_schema = field_schema(arg_model_field, model_name_map=model_name_map) 
             if "$ref" in param_schema:
-                param_schema = next(iter(ref_schema.values()))
+                ent_name = param_schema["$ref"].rsplit("/",1)[-1]
+                param_schema = ref_schema.get(ent_name)
+            elif "$ref" in param_schema.get("items",{}):
+                param_schema["items"]["$ref"]
+                ent_name = param_schema["items"]["$ref"].rsplit("/",1)[-1]
+                param_schema["items"] = ref_schema.get(ent_name)
             if nested_models_schema:
                 raise NotImplementedError("Nested models are not supported yet")
             
@@ -377,9 +400,9 @@ def find_and_parse_params_from_docstrings(docstring:str,format:DocstringsFormat)
         args_section_start_regex_pattern = r"(^|\n)(Args|Arguments|Parameters)\s*:?\s*\n"
         args_section_end_regex_pattern = r"(^|\n)([A-Z][a-z]+)\s*:?\s*\n"
         if  format == DocstringsFormat.GOOGLE:
-            param_start_parser_regex=r"(^|\n)\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<type>[^\)]*)\)?\s*:\s*(?=\w+)"
+            param_start_parser_regex=r"(^|\n)\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(\((?P<type>[^\)]*)\))?\s*:\s*(?=\w+)"
         else:
-            param_start_parser_regex=r"(^|\n)\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*\((?P<type>[^\)]*)\)?\s*(-|:)\s*(?=\w+)"
+            param_start_parser_regex=r"(^|\n)\s+(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\s*(\((?P<type>[^\)]*)\))?\s*(-|:)\s*(?=\w+)"
     elif format == DocstringsFormat.NUMPY:
         args_section_start_regex_pattern = r"(^|\n)(Args|Arguments|Parameters)\s*\n\s*---+\s*\n"
         args_section_end_regex_pattern = r"(^|\n)([A-Z][a-z]+)\s*\n\s*---+\s*\n"
@@ -415,7 +438,7 @@ def find_and_parse_params_from_docstrings(docstring:str,format:DocstringsFormat)
 
             param_name = param_start_match.group("name")
             param_type = param_start_match.group("type")
-            last_param = {"type":param_type,"description":None}
+            last_param = {"type":param_type or "","description":None}
             last_param_end = param_start_match.end()
             params[param_name]=last_param
 

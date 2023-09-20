@@ -1,25 +1,39 @@
 import datetime
 import logging
 from textwrap import dedent
-from typing import Dict, List, Type, TypeVar, Union
+from typing import Callable, Dict, List, Type, TypeVar, Union, get_origin, get_args
 from langchain.output_parsers import PydanticOutputParser
 from langchain.schema import BaseOutputParser, OutputParserException
-
 import re
 import json
 import yaml
-from pydantic import BaseModel, ValidationError
-from pydantic.fields import ModelField
 from .function_decorator import llm_function
 from .pydantic_helpers import *
 
 
-class OutputParserExceptionWithOriginal(OutputParserException):
-    """Exception raised when an output parser fails to parse the output of an LLM call."""
+import pydantic
+if pydantic.__version__ <"2.0.0":
+    from pydantic import BaseModel, ValidationError
+    from pydantic.schema import field_schema, get_flat_models_from_fields, get_model_name_map
+    from pydantic.fields import ModelField
+else:
+    from pydantic.v1 import BaseModel, ValidationError
+    from pydantic.v1.schema import field_schema, get_flat_models_from_fields, get_model_name_map
+    from pydantic.v1.fields import ModelField
 
-    def __init__(self, message: str, original: str, original_prompt_needed_on_retry:bool=False) -> None:
+class ErrorCodes:
+    UNSPECIFIED = 0
+    INVALID_FORMAT = 10
+    INVALID_JSON = 15
+    DATA_VALIDATION_ERROR = 20
+class OutputParserExceptionWithOriginal(OutputParserException):
+    """Exception raised when an output parser fails to parse the output of an LLM call."""    
+
+    def __init__(self, message: str, original: str, original_prompt_needed_on_retry:bool=False, error_code:int=0) -> None:
         super().__init__(message)
         self.original = original
+        self.observation=message
+        self.error_code=error_code
         self.original_prompt_needed_on_retry=original_prompt_needed_on_retry
 
     def __str__(self) -> str:
@@ -66,7 +80,7 @@ class BooleanOutputParser(BaseOutputParser):
         match = re.search(self.pattern, text, flags=re.MULTILINE | re.IGNORECASE)
         
         if not match:
-            raise OutputParserExceptionWithOriginal(message=self.get_format_instructions(),original=text, original_prompt_needed_on_retry=True)
+            raise OutputParserExceptionWithOriginal(message=self.get_format_instructions(),original=text, original_prompt_needed_on_retry=True, error_code=ErrorCodes.INVALID_FORMAT)
         else:
             return match.group(1).lower() == "yes"
         
@@ -77,26 +91,52 @@ class BooleanOutputParser(BaseOutputParser):
 
 class JsonOutputParser(BaseOutputParser):
     """Class to parse the output of an LLM call to a Json."""
-
+    
     @property
     def _type(self) -> str:
         return "json"
+    
+    def find_json_block(self,text, raise_if_not_found=True):
+        match = re.search(r"[\{|\[].*[\}|\]]", text.strip(),
+                              re.MULTILINE | re.IGNORECASE | re.DOTALL)
+        if not match and raise_if_not_found:
+            raise OutputParserExceptionWithOriginal(message="No JSON found in the response", original_output=text, error_code=ErrorCodes.INVALID_JSON)
+        return match
 
-    def parse(self, text: str) -> List[str]:
+    def replace_json_block(self, text: str, replace_func:Callable[[dict],str]) -> str:
+        try:
+            
+            match = self.find_json_block(text)
+            json_str = match.group()
+            i_start = match.start()
+            _i_start = ("\n"+text).rfind("\n```", 0, i_start)
+            i_end = match.end()
+            _i_end = text.find("\n```\n", i_end)
+            i_start=_i_start if _i_start>=0 else i_start
+            i_end=_i_end+5 if _i_end>=0 else i_end
+
+            json_dict = json.loads(json_str, strict=False)
+            replacement = replace_func(json_dict)
+            return (text[:i_start] + replacement + text[i_end:]).strip()
+            
+
+        except (json.JSONDecodeError) as e:
+
+            msg = f"Invalid JSON\n {text}\nGot: {e}"
+            raise OutputParserExceptionWithOriginal(msg, text, error_code=ErrorCodes.INVALID_JSON)
+
+    def parse(self, text: str) -> dict:
         try:
             # Greedy search for 1st json candidate.
-            match = re.search(r"(\[\s*)?\{.*\}(\s*\])?", text.strip(),
-                              re.MULTILINE | re.IGNORECASE | re.DOTALL)
-            json_str = ""
-            if match:
-                json_str = match.group()
+            match = self.find_json_block(text)
+            json_str = match.group()
             json_dict = json.loads(json_str, strict=False)
             return json_dict
 
         except (json.JSONDecodeError) as e:
 
             msg = f"Invalid JSON\n {text}\nGot: {e}"
-            raise OutputParserExceptionWithOriginal(msg, text)
+            raise OutputParserExceptionWithOriginal(msg, text, error_code=ErrorCodes.INVALID_JSON)
 
     def get_format_instructions(self) -> str:
         """Instructions on how the LLM output should be formatted."""
@@ -109,29 +149,33 @@ T = TypeVar("T", bound=BaseModel)
 class PydanticOutputParser(BaseOutputParser[T]):
     """Class to parse the output of an LLM call to a pydantic object."""
     model: Type[T]
+    as_list: bool = False
     instructions_as_json_example: bool = True
 
-    def __init__(self, model: Type[T], instructions_as_json_example: bool = True):
-        super().__init__(model=model, instructions_as_json_example=instructions_as_json_example)
+    def __init__(self, model: Type[T], instructions_as_json_example: bool = True, as_list: bool = False):
+        super().__init__(model=model, instructions_as_json_example=instructions_as_json_example,as_list=as_list)
 
     @property
     def _type(self) -> str:
         return "pydantic"
-
+    
     def parse(self, text: str) -> T:
         try:
             # Greedy search for 1st json candidate.
-            match = re.search(r"\{.*\}", text.strip(),re.MULTILINE | re.IGNORECASE | re.DOTALL)
+            regex_pattern = r"\[.*\]" if self.as_list else r"\{.*\}"
+            match = re.search(regex_pattern, text.strip(),re.MULTILINE | re.IGNORECASE | re.DOTALL)
             json_str = ""
             if match:
                 json_str = match.group()
             json_dict = json.loads(json_str, strict=False)
-
-            return self.model.parse_obj(json_dict)
+            if self.as_list:
+                return [self.model.parse_obj(item) for item in json_dict]
+            else:        
+                return self.model.parse_obj(json_dict)
 
         except (json.JSONDecodeError) as e:
             msg = f"Invalid JSON\n {text}\nGot: {e}"
-            raise OutputParserExceptionWithOriginal(msg, text)
+            raise OutputParserExceptionWithOriginal(msg, text, error_code=ErrorCodes.INVALID_JSON)
 
         except ValidationError as e:
             try:
@@ -139,10 +183,11 @@ class PydanticOutputParser(BaseOutputParser[T]):
                 return self.model.parse_obj(json_dict_aligned)
             except ValidationError as e:
                 err_msg =humanize_pydantic_validation_error(e)
-                raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {text}Errors: {err_msg}",text) 
+                raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {json_str or text}\nErrors: {err_msg}",text, error_code=ErrorCodes.DATA_VALIDATION_ERROR)
         
-    def get_json_example_description(self, model:Type[BaseModel], indentation_level=0):
+    def get_json_example_description(self, model:Type[BaseModel]=None, indentation_level=0):
         field_descriptions = {}
+        model = model or self.model
         for field, field_info in model.__fields__.items():
 
             _item_type = None
@@ -159,28 +204,61 @@ class PydanticOutputParser(BaseOutputParser[T]):
                 raise Exception(f"Unknown type: {field_info.annotation}")
             _nullable = field_info.allow_none
             _description = field_info.field_info.description
-
-            if issubclass(_type, BaseModel):
+            if _nullable and "optional" not in _description:
+                _description="(optional) "+_description
+            if get_origin(_type) == Union:
+                alternative_types = [union_type for union_type in get_args(_type) if union_type != type(None)]
+                _indent = "\t"*(indentation_level+1)
+                _join = f"\n{_indent}or\n\n"
+                field_descriptions[field] = (_join).join([self.get_json_example_description(union_type, indentation_level=indentation_level+1) for union_type in alternative_types])
+            elif isinstance(_type, Type) and issubclass(_type, BaseModel):
                 field_descriptions[field] = (
                     self.get_json_example_description(_type, indentation_level+1))
-            elif _type == str:
-                desc = _get_str_field_description(field_info)
-                field_descriptions[field] = (desc)
             elif _type == datetime:
                 field_descriptions[field] = (
                     "an ISO formatted datetime string")
-            elif _type == list:
-                list_desc = f"[ {_description} ... list of {_item_type} ]"
-                field_descriptions[field] = (list_desc)
+            elif _type == str:
+                desc = _get_str_field_description(field_info)
+                field_descriptions[field] = (desc)
+            elif _type in [bool, int, float]:
+                desc = field_info.field_info.description or "value"
+                field_descriptions[field] = (f"{desc} as {_type.__name__}")
             elif _type == dict:
-                dict_desc = f"{{ ... {_description} ... }}"
-                field_descriptions[field] = (dict_desc)
-            elif _type == int:
-                field_descriptions[field] = ("an integer")
-            elif _type == float:
-                field_descriptions[field] = ("a float number")
+                desc = _get_str_field_description(field_info)
+                field_descriptions[field] = (f"{desc} as valid JSON object")
+            elif _type == list:
+                desc = field_info.field_info.description + " as" if field_info.field_info.description else "a"
+                if _item_type:
+                    if isinstance(_item_type, Type) and issubclass(_item_type, BaseModel):
+                        _item_desc = "\n" + self.get_json_example_description(_item_type, indentation_level+1)
+                    else:
+                        _item_desc=f"{_item_type.__name__}"
+                field_descriptions[field] = (f"{desc} valid JSON array") + (f" of {_item_desc}" if _item_desc else "")
+                field_descriptions[field] = f"[ {field_descriptions[field]} ]"
             else:
-                field_descriptions[field] = "?"            
+                flat_models = get_flat_models_from_fields([field_info], set())
+                model_name_map = get_model_name_map(flat_models)
+                the_field_schema,sub_models,__ = field_schema(field_info,model_name_map=model_name_map )
+                if sub_models:
+                    the_field_schema["definitions"]=sub_models
+                    the_field_schema=sanitize_pydantic_schema(the_field_schema)
+                    if the_field_schema.get("items") and the_field_schema["items"].get("$ref"):
+                        the_field_schema["items"]= next(iter(sub_models.values()))
+
+                example = the_field_schema.get("example")
+                _description=""
+                if the_field_schema.get("type")=="array":
+                    if the_field_schema.get("items",None) and the_field_schema["items"].get("properties",None):
+                        _item_type_str = "\n"+self.get_json_example_description(_item_type,indentation_level+1)
+                    else:
+                        _item_type_str=describe_field_schema(the_field_schema["items"])
+                    _description+=", list of "+_item_type_str
+            
+                if example:
+                    _description+=", for example: "+str(example)
+                field_descriptions[field] = _description
+            
+          
 
         lines = []
         for field, field_info in model.__fields__.items():
@@ -189,15 +267,18 @@ class PydanticOutputParser(BaseOutputParser[T]):
 
             lines.append("\t"*indentation_level + f"\"{field}\": {desc_lines}")
 
-        return "{\n" + ",\n".join(lines) + "\n}"
+        return "\t"*indentation_level  + "{\n" + ",\n".join(lines) + "\n"+"\t"*indentation_level +"}\n"
 
     def get_format_instructions(self) -> str:
         """Instructions on how the LLM output should be formatted."""
         if not self.instructions_as_json_example:
             return "Return result as a valid JSON that matched this json schema definition:\n" + yaml.safe_dump(self.model.schema())
         else:
+            json_example = self.get_json_example_description(self.model)
+            if self.as_list:
+                json_example = f"[\n{json_example}\n...\n]"
 
-            return dedent(f"""```json\n{self.get_json_example_description(self.model)}\n```""").strip()
+            return dedent(f"""```json\n{json_example}```""").strip()
 
 class OpenAIFunctionsPydanticOutputParser(BaseOutputParser[T]):
     model: Type[T]
@@ -215,7 +296,7 @@ class OpenAIFunctionsPydanticOutputParser(BaseOutputParser[T]):
         except ValidationError as e:
             err_msg =humanize_pydantic_validation_error(e)
             serialized= json.dumps(function_call_arguments)
-            raise OutputParserExceptionWithOriginal(f"Function call arguments are not in correct format: {serialized}Errors: {err_msg}",serialized)
+            raise OutputParserExceptionWithOriginal(f"Function call arguments are not in correct format: {serialized}Errors: {err_msg}",serialized, error_code=ErrorCodes.DATA_VALIDATION_ERROR)
         
 
     def get_format_instructions(self) -> str:
@@ -223,11 +304,11 @@ class OpenAIFunctionsPydanticOutputParser(BaseOutputParser[T]):
     
     
     def build_llm_function(self):
-        @llm_function()
-        def generate_response( output:self.model) -> T:
+        @llm_function(arguments_schema=self.model)
+        def generate_response( **kwargs) -> T:
             """ Use this to transform the data into desired format. """
             #above is a description for LLM...
-            return output
+            return kwargs
         return generate_response
 
 
@@ -268,7 +349,7 @@ class CheckListParser(ListOutputParser):
         matches = re.findall(pattern, text, flags=re.MULTILINE)
         result = {}
         if not matches:
-            raise OutputParserExceptionWithOriginal(message="No matches found", original_output=text)
+            raise OutputParserExceptionWithOriginal(message="No matches found", original_output=text, error_code=ErrorCodes.INVALID_FORMAT)
         for match in matches:
             key, value = match.split(":", 1)
             result[key.strip()] = value.strip()
@@ -411,7 +492,7 @@ class MarkdownStructureParser(ListOutputParser):
                     return self.model.parse_obj(res_aligned)
                 except ValidationError as e:
                     err_msg =humanize_pydantic_validation_error(e)
-                    raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {text}\nGot: {err_msg}",text) 
+                    raise OutputParserExceptionWithOriginal(f"Data are not in correct format: {text}\nGot: {err_msg}",text, error_code=ErrorCodes.DATA_VALIDATION_ERROR) 
         else:
             return res
 
@@ -423,11 +504,11 @@ class MarkdownStructureParser(ListOutputParser):
                 self.model, self.sections_parsers)
 
         else:
-            res += "# Section 1\n\ndescription\n\n#Section 2\n\ndescription\n\..."
+            res += "# Section 1\n\ndescription\n\n#Section 2\n\ndescription\n\n..."
         return res
 
 
-def _get_str_field_description(field_info: ModelField, ignore_nullable: bool = False):
+def _get_str_field_description(field_info: ModelField, ignore_nullable: bool = False, default="?"):
     _nullable = field_info.allow_none
     _description = field_info.field_info.description
     _example = field_info.field_info.extra.get("example")
@@ -452,6 +533,13 @@ def _get_str_field_description(field_info: ModelField, ignore_nullable: bool = F
     if description:
         description = " ".join(description)
     else:
-        description = "?"
+        description = default
 
     return (description if _one_of else f"\" {description} \"")
+
+def describe_field_schema(field_schema:dict):
+    if "type" in field_schema:
+        res = field_schema.pop("type")
+        return res + ", " + ", ".join([f"{k}:{v}" for k,v in field_schema.items()])
+    else:
+        return ""
