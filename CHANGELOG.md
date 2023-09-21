@@ -64,3 +64,7 @@ New parameters in llm decorator
 - Support for retrieving a chain object with preconfigured kwargs for more convenient use with the rest of LangChain ecosystem
 - support for followup handle for convenient simple followup to response without using a history object
 - hotfix support for pydantic v2
+
+
+## Version 0.2.1 (2023-09-21)
+- Hotfix of bug causing simple (without prompt blocks) prompts not working

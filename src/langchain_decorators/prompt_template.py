@@ -48,6 +48,7 @@ class OpenAITemplateBuilder:
 
     def build_template(self, template_parts:List[Tuple[str,str]],kwargs:Dict[str,Any])->PromptTemplate:
         if len(template_parts)==1 and not template_parts[0][1]:
+            template_string=template_parts[0][0]
             return PromptTemplate.from_template(template_string)
         else:
             message_templates=[]
