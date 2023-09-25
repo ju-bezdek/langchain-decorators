@@ -91,7 +91,7 @@ class LlmSelector(BaseModel):
         if not self.llms:
             raise Exception("No LLMs rules added to the LlmSelector")
         
-        
+        result_index = None
         first_rule = self.rules[0]
         first_token_threshold = first_rule.get("max_tokens")
         total_tokens_estimate = self.get_expected_total_tokens(prompt, function_schemas=function_schemas, estimate=True, expected_generated_tokens=expected_generated_tokens)
@@ -100,6 +100,8 @@ class LlmSelector(BaseModel):
         else:
             total_tokens = self.get_expected_total_tokens(prompt, function_schemas=function_schemas, estimate=False, expected_generated_tokens=expected_generated_tokens) 
             key_match=False
+            best_match = None
+            best_match_top_tokens = 0
             for i, rule in enumerate(self.rules):
                 if llm_selector_rule_key:
                     if rule.get("llm_selector_rule_key") != llm_selector_rule_key:
@@ -110,11 +112,16 @@ class LlmSelector(BaseModel):
                 if max_tokens and max_tokens >=total_tokens:
                     result_index = i
                     break
+                else:
+                    if max_tokens and max_tokens > best_match_top_tokens:
+                        best_match_top_tokens = max_tokens
+                        best_match = i
                 
             # if no condition is met, return the last llm
             if llm_selector_rule_key and not key_match:
                 raise Exception(f"Could not find a LLM for key {llm_selector_rule_key}. Valid keys are: {set([rule.get('llm_selector_rule_key') for rule in self.rules])}")
-            result_index = i
+            if result_index == None:
+                result_index = best_match
         print_log(f"LLMSelector: Using {'default' if result_index==0 else str(result_index)+'-th'} LLM: {getattr(self.llms[result_index],'model_name', self.llms[result_index].__class__.__name__)}", logging.DEBUG )
         if streaming:
             if result_index not in self.streamable_llms_cache:

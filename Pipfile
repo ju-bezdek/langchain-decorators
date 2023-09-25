@@ -5,9 +5,9 @@ name = "pypi"
 
 [packages]
 langchain_decorators = {editable = true, path = "."}
-langchain = "*"
 promptwatch="*"
 pydantic = "*"
+langchain = "*"
 
 [dev-packages]
 ipykernel = "*"
