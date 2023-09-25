@@ -68,3 +68,6 @@ New parameters in llm decorator
 
 ## Version 0.2.1 (2023-09-21)
 - Hotfix of bug causing simple (without prompt blocks) prompts not working
+
+## Version 0.2.2 (2023-09-25)
+- Minor bugfix of LlmSelector causing error in specific cases
