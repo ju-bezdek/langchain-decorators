@@ -71,3 +71,7 @@ New parameters in llm decorator
 
 ## Version 0.2.2 (2023-09-25)
 - Minor bugfix of LlmSelector causing error in specific cases
+
+## Version 0.2.3 (2023-10-04)
+- Fix verbose result longing when not verbose mode
+- fix langchain logging warnings for using deprecated imports
