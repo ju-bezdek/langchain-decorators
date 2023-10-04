@@ -8,10 +8,8 @@ from string import Formatter
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Union
 
 
-from textwrap import dedent
 
-from langchain import PromptTemplate
-from langchain.prompts import StringPromptTemplate
+from langchain.prompts import StringPromptTemplate, PromptTemplate
 from langchain.prompts.chat import  MessagesPlaceholder, ChatMessagePromptTemplate, ChatPromptTemplate, ChatPromptValue
 from langchain.schema import PromptValue, BaseOutputParser, BaseMemory, BaseChatMessageHistory
 

@@ -5,7 +5,7 @@ import json
 import logging
 import os
 from textwrap import dedent
-from langchain import PromptTemplate
+from langchain.prompts import PromptTemplate
 import yaml
 from enum import Enum
 from typing import Any, Coroutine, Dict, List, Type, Union, Optional, Tuple, get_args, get_origin, TYPE_CHECKING
@@ -271,7 +271,7 @@ class PromptTypeSettings:
                  capture_stream: bool = False, 
                  llm_selector: "LlmSelector" = None, 
                  prompt_template_builder: "BaseTemplateBuilder" = None):
-        self.color = color
+        self.color = color or LogColors.DARK_GRAY
         if isinstance(log_level, str):
             log_level = getattr(logging, log_level.upper())
         self.log_level = log_level
@@ -314,11 +314,11 @@ class PromptTypes:
     
     
     AGENT_REASONING: PromptTypeSettings = PromptTypeSettings(
-        color=LogColors.GREEN, log_level=logging.INFO)
+        color=LogColors.GREEN, log_level=logging.DEBUG)
     TOOL: PromptTypeSettings = PromptTypeSettings(
-        color=LogColors.BLUE, log_level=logging.INFO)
+        color=LogColors.BLUE, log_level=logging.DEBUG)
     FINAL_OUTPUT: PromptTypeSettings = PromptTypeSettings(
-        color=LogColors.YELLOW, log_level=logging.INFO)
+        color=LogColors.YELLOW, log_level=logging.DEBUG)
 
 
 def get_func_return_type(func: callable, with_args:bool=False)->Union[Type, Tuple[Type, List[Type]]]:

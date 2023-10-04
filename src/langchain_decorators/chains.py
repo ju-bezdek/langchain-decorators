@@ -2,7 +2,8 @@ import json
 import logging
 import inspect
 from typing import Any, Callable, Coroutine, Dict, List, Optional,  Union
-from langchain import LLMChain,  PromptTemplate
+from langchain.chains import LLMChain
+from langchain.prompts import  PromptTemplate
 from langchain.schema import LLMResult
 from langchain.callbacks.manager import CallbackManagerForChainRun, AsyncCallbackManagerForChainRun, Callbacks
 from langchain.tools.base import BaseTool
