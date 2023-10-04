@@ -806,7 +806,7 @@ def log_results(result_data, result, is_function_call=False, verbose=False, prom
     if verbose or prompt_type:
         if not prompt_type:
             prompt_type = PromptTypes.UNDEFINED
-        print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
+        print_log(log_object=f"\nResult:\n{result}", log_level=prompt_type.log_level if not verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
         if is_function_call:
             function_call_info_str = json.dumps(result_data.get('function_call_info'),indent=4)
-            print_log(log_object=f"\nFunction call:\n{function_call_info_str}", log_level=prompt_type.log_level if verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
+            print_log(log_object=f"\nFunction call:\n{function_call_info_str}", log_level=prompt_type.log_level if not verbose else 100,color=prompt_type.color if prompt_type else LogColors.BLUE)
