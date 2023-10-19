@@ -2,8 +2,7 @@
 
 lanchchain decorators is a layer on the top op LangChain that provides syntactic sugar 🍭 for writing custom langchain prompts and chains
 
-> **Note:** This is an unofficial addon to langchain library. It's not trying to compete, just to make using it easier. Lot's of ideas here are totally opinionated 
-
+> **Note:** This is an unofficial addon to langchain library. It's not trying to compete, just to make using it easier. Lot's of ideas here are totally opinionated
 
 Here is a simple example of a code written with **LangChain Decorators ✨**
 
@@ -24,7 +23,6 @@ write_me_short_post(topic="starwars")
 write_me_short_post(topic="starwars", platform="redit")
 ```
 
-
 **Main principles and benefits:**
 
 - more `pythonic` way of writing code
@@ -34,21 +32,22 @@ write_me_short_post(topic="starwars", platform="redit")
 - adding support for **optional parameters**
 - easily share parameters between the prompts by binding them to one class
 
-
-
 [Quick start](#quick-start)
+
 - [Installation](#installation)
 - [Examples](#examples)
 
 [Prompt declarations](#prompt-declarations)
+
 - [Documenting your prompt](#documenting-your-prompt)
 - [Chat messages prompt](#chat-messages-prompt)
 - [Optional sections](#optional-sections)
 - [Output parsers](#output-parsers)
 
 [LLM functions (OpenAI functions)](#llm-functions)
--  [Functions provider](#functions-provider)
--  [Dynamic function schemas](#dynamic-function-schemas)
+
+- [Functions provider](#functions-provider)
+- [Dynamic function schemas](#dynamic-function-schemas)
 
 [Simplified streaming](#simplified-streaming)
 
@@ -64,35 +63,31 @@ write_me_short_post(topic="starwars", platform="redit")
 
 [Passing a memory, callback, stop etc.](#passing-a-memory-callback-stop-etc)
 
-
-
-
 [Other](#other)
+
 - [More examples](#more-examples)
 - [Contributing](#contributing)
 
+## Quick start
 
-# Quick start
+### Installation
 
-
-## Installation
 ```bash
 pip install langchain_decorators
 ```
 
-## Examples
+### Examples
 
 Good idea on how to start is to review the examples here:
- - [jupyter notebook](example_notebook.ipynb)
- - [colab notebook](https://colab.research.google.com/drive/1no-8WfeP6JaLD9yUtkPgym6x0G9ZYZOG#scrollTo=N4cf__D0E2Yk)
 
+- [jupyter notebook](example_notebook.ipynb)
+- [colab notebook](https://colab.research.google.com/drive/1no-8WfeP6JaLD9yUtkPgym6x0G9ZYZOG#scrollTo=N4cf__D0E2Yk)
 
+## Prompt declarations
 
+By default the prompt is the whole function docs, unless you mark your prompt
 
-# Prompt declarations
-By default the prompt is is the whole function docs, unless you mark your prompt 
-
-## Documenting your prompt
+### Documenting your prompt
 
 We can specify what part of our docs is the prompt definition, by specifying a code block with **<prompt>** language tag
 
@@ -109,13 +104,13 @@ def write_me_short_post(topic:str, platform:str="twitter", audience:str = "devel
     (Max 15 words)
     ```
 
-    Now only to code block above will be used as a prompt, and the rest of the docstring will be used as a description for developers.
+    Now only the code block above will be used as a prompt, and the rest of the docstring will be used as a description for developers.
     (It has also a nice benefit that IDE (like VS code) will display the prompt properly (not trying to parse it as markdown, and thus not showing new lines properly))
     """
     return 
 ```
 
-## Chat messages prompt
+### Chat messages prompt
 
 For chat models is very useful to define prompt as a set of message templates... here is how to do it:
 
@@ -128,7 +123,7 @@ def simulate_conversation(human_input:str, agent_role:str="a pirate"):
      
 
     ```<prompt:system>
-    You are a {agent_role} hacker. You mus act like one.
+    You are a {agent_role} hacker. You must act like one.
     You reply always in code, using python or javascript code block...
     for example:
     
@@ -158,7 +153,7 @@ def simulate_conversation(human_input:str, agent_role:str="a pirate"):
     {human_input}
     ```
 
-    Now only to code block above will be used as a prompt, and the rest of the docstring will be used as a description for developers.
+    Now only the code block above will be used as a prompt, and the rest of the docstring will be used as a description for developers.
     (It has also a nice benefit that IDE (like VS code) will display the prompt properly (not trying to parse it as markdown, and thus not showing new lines properly))
     """
     pass
@@ -167,11 +162,10 @@ def simulate_conversation(human_input:str, agent_role:str="a pirate"):
 
 the roles here are model native roles (assistant, user, system for chatGPT)
 
+## Optional sections
 
-
-# Optional sections
-- you can define a whole sections of your prompt that should be optional
-- if any input in the section is missing, the whole section wont be rendered
+- you can define a whole section of your prompt that should be optional
+- if any input in the section is missing, the whole section won't be rendered
 
 the syntax for this is as follows:
 
@@ -186,15 +180,14 @@ def prompt_with_optional_partials():
     you can also place it in between the words
     this too will be rendered{? , but
         this  block will be rendered only if {this_value} and {this_value}
-        is not empty?} !
+        are not empty?} !
     """
 ```
 
-
-# Output parsers
+## Output parsers
 
 - llm_prompt decorator natively tries to detect the best output parser based on the output type. (if not set, it returns the raw string)
-- list, dict and pydantic outputs are also supported natively (automaticaly)
+- list, dict and pydantic outputs are also supported natively (automatically)
 
 ``` python
 # this code example is complete and should run as it is
@@ -210,11 +203,12 @@ def write_name_suggestions(company_business:str, count:int)->list:
 write_name_suggestions(company_business="sells cookies", count=5)
 ```
 
-# LLM functions
+## LLM functions
+
 - currently supported only for the latest OpenAI chat models
 
-- all you need to do is annotate your function with @llm_function decorator. 
-- This will parse the description for LLM (first coherent paragraph is considered as function description) 
+- all you need to do is annotate your function with the @llm_function decorator.
+- This will parse the description for LLM (first coherent paragraph is considered as function description)
 - and aso parameter descriptions (Google, Numpy and Spihnx notations are supported for now)
 
 - by default the docstring format is automatically resolved, but setting the format of the docstring can speed things up a bit.
@@ -223,9 +217,8 @@ write_name_suggestions(company_business="sells cookies", count=5)
         -  `numpy`: the docstring is parsed as markdown (see [Numpy docstring format](https://numpydoc.readthedocs.io/en/latest/format.html))
         -  `sphinx`: the docstring is parsed as sphinx format (see [Sphinx docstring format](https://sphinx-rtd-tutorial.readthedocs.io/en/latest/docstrings.html))
 
-
 To annotate an *"enum"* like argument, you can use this "typescript" like format: `["value_a" | "value_b"]` ... if will be parsed out.
-This text will be a part of a description too... if you dont want it, you can use this notation as a type notation. 
+This text will be a part of a description too... if you dont want it, you can use this notation as a type notation.
 Example:
 ```
 Args:
@@ -233,10 +226,8 @@ Args:
         
 ```
 
-
 Then you pass these functions as arguments to and  `@llm_prompt` (the argument must be named `functions` ‼️)
-here you can pass any @llm_function there or a native LangChain tool 
-
+here you can pass any @llm_function there or a native LangChain tool
 
 here is how to use it:
 
@@ -269,7 +260,7 @@ list_of_other_tools = load_tools(
 def do_what_user_asks_for(user_input:str, functions:List[Union[Callable,BaseTool]]):
     """ 
     ``` <prompt:system>
-    Your role is to be a helpfull asistant.
+    Your role is to be a helpful asistant.
     ```
     ``` <prompt:user>
     {user_input}
@@ -293,7 +284,6 @@ else:
 > - if you set the value to "none" - it will disable the function call for the moment, but it can still see them (useful do to some reasoning/planning before calling the function)
 > - if you set the value to "auto" - GPT will choose to use or to to use the functions
 > - if you set the value to a name of function / or the function it self (decorators will handle resolving the same name as used in schema) it will force GPT to use that function
-
 
 If you use functions argument, the output will be always `OutputWithFunctionCall`
 
@@ -335,7 +325,8 @@ class OutputWithFunctionCall(BaseModel):
         ...
 ```
 
-If you want to see how to schema has been build, you can use `get_function_schema` method that is added to the function by the decorator:
+If you want to see how the schema has been build, you can use `get_function_schema` method that is added to the function by the decorator:
+
 ```python
 from langchain_decorators import get_function_schema
 @llm_function
@@ -347,18 +338,17 @@ print(f_schema)
 
 ```
 
-In order to add the result to memory / agent_scratchpad you can use `to_function_message` to generate an FunctionMessage that LLM will interpret as a Tool/Function result
+In order to add the result to memory / agent_scratchpad you can use `to_function_message` to generate a FunctionMessage that LLM will interpret as a Tool/Function result
 
-
-## Functions provider
+### Functions provider
 
 Functions provider enables you to provide set of llm functions more dynamically, for example list of functions - based on the input.
 It also enables you to give a unique name to each function for this LLM run. This might be useful for two reasons:
+
 - avoid naming conflicts, if you are combining multiple general purpose functions
 - further guidance/hinting of LLM model
 
-
-## Dynamic function schemas
+### Dynamic function schemas
 
 Function schemas (and especially their descriptions) are crucial tools to guide LLM. If you enable dynamic function declaration, you can (re)use the same prompt attributes for the main prompt also in the llm_function scheme:
 
@@ -384,13 +374,13 @@ run_agent(query_input, closest_examples, functions=[db_search, ...])
 
 this is just for illustration, fully executable example is available [here, in code examples](code_examples/dynamic_function_schema.py)
 
+## Simplified streaming
 
-# Simplified streaming
+If we want to leverage streaming:
 
-If we wan't to leverage streaming:
- - we need to define prompt as async function 
- - turn on the streaming on the decorator, or we can define PromptType with streaming on
- - capture the stream using StreamingContext
+- we need to define prompt as async function
+- turn on the streaming on the decorator, or we can define PromptType with streaming on
+- capture the stream using StreamingContext
 
 This way we just mark which prompt should be streamed, not needing to tinker with what LLM should we use, passing around the creating and distribute streaming handler into particular part of our chain... just turn the streaming on/off on prompt/prompt type...
 
@@ -432,12 +422,12 @@ print("Here is the result:")
 print(result)
 ```
 
-## Automatic LLM selection
+### Automatic LLM selection
 
-In real live there might be situations, where tha context would grow over the window of the base model you're using (for example long chat history)...
-But since this might happen only some times, it would be great it only in this scenario the (usually more expensive) model with bigger context window would be used, and otherwise a we'd use the cheaper one.
+In real life there might be situations, where the context would grow over the window of the base model you're using (for example long chat history)...
+But since this might happen only some times, it would be great if only in this scenario the (usually more expensive) model with bigger context window would be used, and otherwise we'd use the cheaper one.
 
-Now you can do it with LlmSelector 
+Now you can do it with LlmSelector
 
 ```python
 from langchain_decorators import  LlmSelector
@@ -449,12 +439,12 @@ my_llm_selector = LlmSelector(
         .with_llm(ChatOpenAI(model = "gpt-3.5-turbo"))\   # these models are known, therefore we can just pass them and the max window will be resolved
         .with_llm(ChatOpenAI(model = "gpt-3.5-turbo-16k-0613"))\ 
         .with_llm(ChatOpenAI(model = "claude-v1.3-100k"))
-    )
 ```
 
 This class allows you to define a sequence of LLMs with a rule based on the length of the prompt, and expected generation length... and only after the threshold will be passed, the more expensive model will be used automatically.
 
 You can define it into GlobalSettings:
+
 ``` python
 langchain_decorators.GlobalSettings.define_settings(
         llm_selector = my_llm_selector # pass the selector into global settings
@@ -462,7 +452,7 @@ langchain_decorators.GlobalSettings.define_settings(
 
 ```
 
-> **Note:** as of version v0.0.10 you there the LlmSelector is in the default settings predefined. 
+> **Note:** as of version v0.0.10 you there the LlmSelector is in the default settings predefined.
 > You can override it by providing you own, or setting up the default LLM or default streaming LLM
 
 Or into specific prompt type:
@@ -475,9 +465,9 @@ class MyCustomPromptTypes(PromptTypes):
 
 ```
 
-## More complex structures
+### More complex structures
 
-for dict / pydantic you need to specify the formatting instructions... 
+For dict / pydantic you need to specify the formatting instructions...
 this can be tedious, that's why you can let the output parser generate you the instructions based on the model (pydantic)
 
 ``` python
@@ -506,8 +496,7 @@ print("company employees: ",company.employees)
 
 ```
 
-
-# Binding the prompt to an object
+## Binding the prompt to an object
 
 ``` python
 from pydantic import BaseModel
@@ -547,62 +536,62 @@ personality = AssistantPersonality(assistant_name="John", assistant_role="a pira
 print(personality.introduce_your_self(personality))
 ```
 
-# Defining custom settings
-Here we are just marking a function as a prompt with `llm_prompt` decorator, turning it effectively into a LLMChain. Instead of running it 
+## Defining custom settings
 
+Here we are just marking a function as a prompt with `llm_prompt` decorator, turning it effectively into a LLMChain. Instead of running it
 
 Standard LLMchain takes much more init parameter than just inputs_variables and prompt... here is this implementation detail hidden in the decorator.
 Here is how it works:
 
 1. Using **Global settings**:
 
-``` python
-# define global settings for all prompty (if not set - chatGPT is the current default)
-from langchain_decorators import GlobalSettings
+    ``` python
+    # define global settings for all prompty (if not set - chatGPT is the current default)
+    from langchain_decorators import GlobalSettings
 
-GlobalSettings.define_settings(
-    default_llm=ChatOpenAI(temperature=0.0), this is default... can change it here globally
-    default_streaming_llm=ChatOpenAI(temperature=0.0,streaming=True), this is default... can change it here for all ... will be used for streaming
-)
-```
+    GlobalSettings.define_settings(
+        default_llm=ChatOpenAI(temperature=0.0), this is default... can change it here globally
+        default_streaming_llm=ChatOpenAI(temperature=0.0,streaming=True), this is default... can change it here for all ... will be used for streaming
+    )
+    ```
 
 2. Using predefined **prompt types**
 
-``` python
-#You can change the default prompt types
-from langchain_decorators import PromptTypes, PromptTypeSettings
+    ``` python
+    #You can change the default prompt types
+    from langchain_decorators import PromptTypes, PromptTypeSettings
 
-PromptTypes.AGENT_REASONING.llm = ChatOpenAI()
+    PromptTypes.AGENT_REASONING.llm = ChatOpenAI()
 
-# Or you can just define your own ones:
-class MyCustomPromptTypes(PromptTypes):
-    GPT4=PromptTypeSettings(llm=ChatOpenAI(model="gpt-4"))
+    # Or you can just define your own ones:
+    class MyCustomPromptTypes(PromptTypes):
+        GPT4=PromptTypeSettings(llm=ChatOpenAI(model="gpt-4"))
 
-@llm_prompt(prompt_type=MyCustomPromptTypes.GPT4) 
-def write_a_complicated_code(app_idea:str)->str:
-    ...
+    @llm_prompt(prompt_type=MyCustomPromptTypes.GPT4) 
+    def write_a_complicated_code(app_idea:str)->str:
+        ...
 
-```
+    ```
 
-3.  Define the settings **directly in the decorator**
+3. Define the settings **directly in the decorator**
 
-``` python
-from langchain.llms import OpenAI
+    ``` python
+    from langchain.llms import OpenAI
 
-@llm_prompt(
-    llm=OpenAI(temperature=0.7),
-    stop_tokens=["\nObservation"],
-    ...
-    )
-def creative_writer(book_title:str)->str:
-    ...
-```
+    @llm_prompt(
+        llm=OpenAI(temperature=0.7),
+        stop_tokens=["\nObservation"],
+        ...
+        )
+    def creative_writer(book_title:str)->str:
+        ...
+    ```
 
-## Passing a memory, callback, stop etc.:
+### Passing a memory, callback, stop, etc
 
 To pass any of these, just declare them in the function (or use kwargs to pass anything)
 
-(They do not necessarily need to be declared, but it is a good practice if you are doing to use them)
+(They do not necessarily need to be declared, but it is a good practice if you are going to use them)
 
 ```python
 
@@ -620,13 +609,14 @@ await write_me_short_post(topic="old movies")
 
 ```
 
-# Debugging
+## Debugging
 
-## Logging to console
+### Logging to console
+
 There are several options how to control the outputs logged into console.
 The easiest way is to define ENV variable: `LANGCHAIN_DECORATORS_VERBOSE` and set it to "true"
 
-You can control this also programmatically by defining you global settings as shown [here](#defining-custom-settings)
+You can also control this programmatically by defining your global settings as shown [here](#defining-custom-settings)
 
 The last option is to control it per each case, simply by turing on verbose mode on prompt:
 ```
@@ -635,26 +625,26 @@ def your_prompt(param1):
   ...
 ```
 
-## Using PromptWatch.io
-PromptWatch io is a platform to track and trace details about everything that is going on in langchain executions. 
-It allows a single line drop in integration, just by wrapping your entry point code in 
+### Using PromptWatch.io
+
+PromptWatch io is a platform to track and trace details about everything that is going on in langchain executions.
+It allows a single line drop in integration, just by wrapping your entry point code in
 ```
 with PromptWatch():
     run_your_code()
 ```
 Learn more about PromptWatch here: [www.promptwatch.io](https://www.promptwatch.io)
 
+## Other
 
-# Other
-- this project is dependant on [langchain](https://github.com/hwchase17/langchain) (obviously) 
-- as well as on promptwatch [promptwatch](https://github.com/blip-solutions/promptwatch-client), which make it easy to track and store to logs, track changes in prompts and compare them by running unit tests over the prompts... 
+- this project is dependant on [langchain](https://github.com/hwchase17/langchain) (obviously)
+- as well as on [promptwatch](https://github.com/blip-solutions/promptwatch-client), which make it easy to track and store to logs, track changes in prompts and compare them by running unit tests over the prompts...
 
-## More examples:
+### More examples
 
 - these and few more examples are also available in the [examples notebook here](https://colab.research.google.com/drive/1no-8WfeP6JaLD9yUtkPgym6x0G9ZYZOG#scrollTo=N4cf__D0E2Yk)
 - including the [ReAct Agent re-implementation](https://colab.research.google.com/drive/1no-8WfeP6JaLD9yUtkPgym6x0G9ZYZOG#scrollTo=3bID5fryE2Yp) using purely langchain decorators
 
-
 ## Contributing
-feedback, contributions and PR are welcomed 🙏
 
+feedback, contributions and PR are welcomed 🙏
