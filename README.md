@@ -26,7 +26,7 @@ write_me_short_post(topic="starwars", platform="redit")
 **Main principles and benefits:**
 
 - more `pythonic` way of writing code
-- write multiline prompts that wont break your code flow with indentation
+- write multiline prompts that won't break your code flow with indentation
 - making use of IDE in-built support for **hinting**, **type checking** and **popup with docs** to quickly peek in the function to see the prompt, parameters it consumes etc.
 - leverage all the power of 🦜🔗 LangChain ecosystem
 - adding support for **optional parameters**
@@ -105,7 +105,7 @@ def write_me_short_post(topic:str, platform:str="twitter", audience:str = "devel
     ```
 
     Now only the code block above will be used as a prompt, and the rest of the docstring will be used as a description for developers.
-    (It has also a nice benefit that IDE (like VS code) will display the prompt properly (not trying to parse it as markdown, and thus not showing new lines properly))
+    (It also has a nice benefit that IDE (like VS code) will display the prompt properly (not trying to parse it as markdown, and thus not showing new lines properly))
     """
     return 
 ```
@@ -154,7 +154,7 @@ def simulate_conversation(human_input:str, agent_role:str="a pirate"):
     ```
 
     Now only the code block above will be used as a prompt, and the rest of the docstring will be used as a description for developers.
-    (It has also a nice benefit that IDE (like VS code) will display the prompt properly (not trying to parse it as markdown, and thus not showing new lines properly))
+    (It also has a nice benefit that IDE (like VS code) will display the prompt properly (not trying to parse it as markdown, and thus not showing new lines properly))
     """
     pass
 
