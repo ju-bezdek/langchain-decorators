@@ -185,7 +185,7 @@ class GlobalSettings(BaseModel):
         """
         if llm_selector is None and default_llm is None and default_streaming_llm is None:
             # only use llm_selector if no default_llm and default_streaming_llm is defined, because than we dont know what rules to set up
-            default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0613") #  '-0613' - has function calling
+            default_llm = ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview") #  '-1106-preview' - supports parallel function calling
             default_streaming_llm = make_llm_streamable(default_llm)
             llm_selector = LlmSelector()\
                 .with_llm(default_llm, llm_selector_rule_key="chatGPT")\
@@ -195,7 +195,7 @@ class GlobalSettings(BaseModel):
         
         else:
             if default_llm is None:
-                default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0613")  #  '-0613' - has function calling
+                default_llm = ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview") #  '-1106-preview' - supports parallel function calling
             if default_streaming_llm is None:
                 default_streaming_llm = make_llm_streamable(default_llm)
             
