@@ -185,17 +185,17 @@ class GlobalSettings(BaseModel):
         """
         if llm_selector is None and default_llm is None and default_streaming_llm is None:
             # only use llm_selector if no default_llm and default_streaming_llm is defined, because than we dont know what rules to set up
-            default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0613") #  '-0613' - has function calling
+            default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106" if USE_PREVIEW_MODELS else "gpt-3.5-turbo", request_timeout=90) #  '-0613' - has function calling
             default_streaming_llm = make_llm_streamable(default_llm)
             llm_selector = LlmSelector()\
                 .with_llm(default_llm, llm_selector_rule_key="chatGPT")\
-                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k"), llm_selector_rule_key="chatGPT")\
-                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4"), llm_selector_rule_key="GPT4")\
+                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview"  if USE_PREVIEW_MODELS else "gpt-3.5-turbo-16k",  request_timeout=120), llm_selector_rule_key="GPT4")\
+                #.with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106"), llm_selector_rule_key="chatGPT")\
                 #.with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-32k"), llm_selector_rule_key="GPT4") 
         
         else:
             if default_llm is None:
-                default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0613")  #  '-0613' - has function calling
+                default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106" if USE_PREVIEW_MODELS else "gpt-3.5-turbo", request_timeout=90)  #  '-0613' - has function calling
             if default_streaming_llm is None:
                 default_streaming_llm = make_llm_streamable(default_llm)
             
@@ -295,21 +295,22 @@ class PromptTypeSettings:
     def as_verbose(self):
         return PromptTypeSettings(llm=self.llm, color=self.color, log_level=100, capture_stream=self.capture_stream, llm_selector=self.llm_selector, prompt_template_builder=self.prompt_template_builder)
 
+USE_PREVIEW_MODELS = os.environ.get("LANGCHAIN_DECORATORS_USE_PREVIEW_MODELS", True) in [True,"true","True","1"]
 
 class PromptTypes:
     UNDEFINED: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
     
     BIG_CONTEXT: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k"), 
+        llm=ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k", request_timeout=60), 
         color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
 
     GPT4: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-4-0613"), 
+        llm=ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview" if USE_PREVIEW_MODELS else "gpt-4", request_timeout=90), 
         color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
      
     BIG_CONTEXT_GPT4: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-4-32k-0613"), 
+        llm=ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview" if USE_PREVIEW_MODELS else "gpt-4", request_timeout=90), 
         color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
     
     
@@ -425,11 +426,10 @@ MODEL_LIMITS={
     "text-davinci-003.*": 4_097,
     "text-davinci-003.*": 4_097,
     "code-davinci-002.*": 8_001,
-
+    "gpt-4-1106-preview": 128_000,
     "gpt-4-32k.*": 32_768,
     "gpt-4.*": 8_192,
     
-    "claude-v1":9000,
     "claude-v1":9000,
     r"claude-v\d(\.\d+)?-100k":100_000,
 }

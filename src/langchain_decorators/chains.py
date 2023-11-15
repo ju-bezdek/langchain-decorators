@@ -35,8 +35,8 @@ try:
 except ImportError:
     pass
 
-MODELS_WITH_FUNCTIONS_SUPPORT=["gpt-3.5-turbo-0613","gpt-4-0613"]
 
+MODELS_WITH_JSON_FORMAT_SUPPORT=["gpt-3.5-turbo-1106","gpt-4-1106-preview"]
 
 
 class FunctionsProvider:
@@ -340,6 +340,12 @@ class LLMDecoratorChain(LLMChain):
         prompts, stop = self.prep_prompts(input_list, run_manager=run_manager)
 
         llm = self.select_llm(prompts, input_list[0])
+
+        additional_kwargs={}
+        if isinstance(llm, ChatOpenAI):
+            if llm.model_name in MODELS_WITH_JSON_FORMAT_SUPPORT and self.prompt.output_parser and self.prompt.output_parser._type=="json":
+                additional_kwargs["response_format"]= { "type": "json_object" }
+
         try:
             return llm.generate_prompt(
                 prompts, stop, callbacks=run_manager.get_child() if run_manager else None
@@ -348,7 +354,8 @@ class LLMDecoratorChain(LLMChain):
             if not self._is_retry==True:
                 self._is_retry=True
                 return llm.generate_prompt(
-                    prompts, stop, callbacks=run_manager.get_child() if run_manager else None
+                    prompts, stop, callbacks=run_manager.get_child() if run_manager else None,
+                    **additional_kwargs
                 )
             else:
                 raise Exception(e.feedback)
@@ -361,7 +368,10 @@ class LLMDecoratorChain(LLMChain):
         """Generate LLM result from inputs."""
         prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
         llm = self.select_llm(prompts, input_list[0])
-        
+        additional_kwargs={}
+        if isinstance(llm, ChatOpenAI):
+            if llm.model_name in MODELS_WITH_JSON_FORMAT_SUPPORT and self.prompt.output_parser and self.prompt.output_parser._type=="json":
+                additional_kwargs["response_format"]= { "type": "json_object" }
         try:
             return await llm.agenerate_prompt(
                 prompts, stop, callbacks=run_manager.get_child() if run_manager else None
@@ -370,7 +380,8 @@ class LLMDecoratorChain(LLMChain):
             if not self._is_retry==True:
                 self._is_retry=True
                 return await llm.agenerate_prompt(
-                    prompts, stop, callbacks=run_manager.get_child() if run_manager else None
+                    prompts, stop, callbacks=run_manager.get_child() if run_manager else None,
+                    **additional_kwargs
                 )
             else:
                 raise Exception(e.feedback)
@@ -430,10 +441,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
         
         if not isinstance(llm,ChatOpenAI) and not isinstance(llm, CachedChatLLM):
             raise ValueError(f"llm must be a ChatOpenAI instance. Got: {llm}")
-        else:
-            if not isinstance(llm, CachedChatLLM) and getattr(llm,"model_name",None) not in MODELS_WITH_FUNCTIONS_SUPPORT:
-                # keeping this as a warning to keep it future proof
-                logging.warn(f'WARNING! Model {getattr(llm,"model_name", "-unknown-")} likely does not support functions. Functions will be likely ignored!)')
+        
 
         return values
     
