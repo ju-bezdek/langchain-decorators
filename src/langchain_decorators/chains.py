@@ -243,7 +243,9 @@ class LLMDecoratorChain(LLMChain):
             result = self.postprocess_outputs(result_data, result)
         except OutputParserExceptionWithOriginal as e:
             if self.allow_retries:
-                retryChain, call_kwargs = self._get_retry_parse_call_args(self.prompt, e, lambda: self.prompt.format(kwargs["inputs"]))
+                _kwargs = {**self.default_call_kwargs} if self.default_call_kwargs else {}
+                _kwargs.update(kwargs)
+                retryChain, call_kwargs = self._get_retry_parse_call_args(self.prompt, e, lambda: self.prompt.format(**_kwargs["inputs"]))
                 result = retryChain.predict(**call_kwargs)
                 print_log(log_object=f"\nResult:\n{result}", log_level=self.prompt_type.log_level if not self.verbose else 100,color=self.prompt_type.color if self.prompt_type else LogColors.BLUE)
                 return self.postprocess_outputs(result_data, result)
@@ -274,7 +276,9 @@ class LLMDecoratorChain(LLMChain):
             result = self.postprocess_outputs(result_data, result)
         except OutputParserExceptionWithOriginal as e:
             if self.allow_retries:
-                retryChain, call_kwargs = self._get_retry_parse_call_args(self.prompt, e, lambda: self.prompt.format(kwargs["inputs"]))
+                _kwargs = {**self.default_call_kwargs} if self.default_call_kwargs else {}
+                _kwargs.update(kwargs)
+                retryChain, call_kwargs = self._get_retry_parse_call_args(self.prompt, e, lambda: self.prompt.format(**_kwargs["inputs"]))
                 result = await retryChain.apredict(**call_kwargs)
                 print_log(log_object=f"\nResult:\n{result}", log_level=self.prompt_type.log_level if not self.verbose else 100,color=self.prompt_type.color if self.prompt_type else LogColors.BLUE)
                 return self.postprocess_outputs(result_data, result)
@@ -307,7 +311,10 @@ class LLMDecoratorChain(LLMChain):
         log_results(result_data, result, is_function_call=False, verbose=self.verbose, prompt_type=self.prompt_type)
         if self.prompt.output_parser:    
             if result:
-                result = self.prompt.output_parser.parse(result)
+                try:
+                    result = self.prompt.output_parser.parse(result)
+                except:
+                    result = False if result and "yes" in result.lower() else False # usually its something like "Im sorry..."
         return result
     
     def select_llm(self, prompts, inputs=None):
@@ -494,7 +501,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
         """Generate LLM result from inputs."""
         
         additional_kwargs, final_function_schemas = self.preprocess_inputs(input_list)
-           
+       
         prompts, stop = self.prep_prompts(input_list, run_manager=run_manager)
         chat_model:BaseChatModel=self.select_llm(prompts, input_list[0])
         def run():
@@ -780,7 +787,7 @@ class FollowupHandle(BaseCallbackHandler):
             if with_functions:
                 results_data = self.chain.create_outputs(llm_result)
 
-                self.chain._generate_output_with_function_call(result, result,result=result_data)
+                self.chain._generate_output_with_function_call(result, result_data=results_data[0] if results_data else None)
                 return self.chain.postprocess_outputs(result, results_data[0])
         else:
             if with_functions:

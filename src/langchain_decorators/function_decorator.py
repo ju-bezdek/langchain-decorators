@@ -466,7 +466,7 @@ def find_and_parse_params_from_docstrings(docstring:str,format:DocstringsFormat)
         
             
 def parse_enum_from_docstring_param(type:str, description)->str:
-    enum_pattern=r"\[\s*(?P<value>[\"|'][\w|_|-]+[\"|']\s*(\||\]))+"
+    enum_pattern=r"\[\s*(?P<value>[\"|'][\w|_|-| ]+[\"|']\s*(\||\]))+"
     enum_part_match = re.search(enum_pattern, type +" / " +description)
     if not enum_part_match:
         return None
