@@ -249,7 +249,8 @@ def llm_prompt(
                                     required.remove(k)
                         func_args.update(required)
                         func_args.update(optional)
-                        kwargs = validate_and_enrich_kwargs(kwargs, input_variables_source,  memory,required, optional)
+                        additional_variable_source = getattr(llm_func,"__self__",None)
+                        kwargs = validate_and_enrich_kwargs(kwargs, input_variables_source,  memory,required, optional, additional_variable_source)
 
                 llmChain = LLMDecoratorChainWithFunctionSupport(
                     llm=prompt_llm, 
@@ -325,7 +326,7 @@ def llm_prompt(
            
             return llmChain
 
-        def validate_and_enrich_kwargs(kwargs, input_variables_source, memory, required_args, optional_args=None):
+        def validate_and_enrich_kwargs(kwargs, input_variables_source, memory, required_args, optional_args=None, additional_input_variables_source=None):
             missing_inputs = [ key for key in required_args if key not in kwargs ]
             if optional_args:
                 missing_inputs.extend([key for key in optional_args if key not in kwargs ])
@@ -355,8 +356,10 @@ def llm_prompt(
             if missing_inputs:
                 missing_value={}
                 for key in missing_inputs:
-                    if input_variables_source:
+                    if input_variables_source or additional_input_variables_source:
                         value= get_value_ext(input_variables_source, key,missing_value)
+                        if value is missing_value:
+                            value= get_value_ext(additional_input_variables_source, key,missing_value)
                     else:
                         value=missing_value
 
@@ -365,9 +368,7 @@ def llm_prompt(
                         if value is missing_value:
                             if optional_args and key in optional_args:
                                 continue
-                            
-                            value= get_value_ext(kwargs, key,missing_value)
-                            value= get_value_ext(input_variables_source, key,missing_value)    
+                        
                             raise TypeError(f"Missing a input for prompt function {full_name}: {key}.")
                     
                     kwargs[key] = value
