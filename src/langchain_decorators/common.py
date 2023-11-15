@@ -17,6 +17,7 @@ from typing_inspect import is_generic_type, is_union_type
 
 import pydantic
 
+USE_PREVIEW_MODELS = os.environ.get("LANGCHAIN_DECORATORS_USE_PREVIEW_MODELS", True) in [True,"true","True","1"]
 
 
 if pydantic.__version__ <"2.0.0":
@@ -295,7 +296,7 @@ class PromptTypeSettings:
     def as_verbose(self):
         return PromptTypeSettings(llm=self.llm, color=self.color, log_level=100, capture_stream=self.capture_stream, llm_selector=self.llm_selector, prompt_template_builder=self.prompt_template_builder)
 
-USE_PREVIEW_MODELS = os.environ.get("LANGCHAIN_DECORATORS_USE_PREVIEW_MODELS", True) in [True,"true","True","1"]
+
 
 class PromptTypes:
     UNDEFINED: PromptTypeSettings = PromptTypeSettings(

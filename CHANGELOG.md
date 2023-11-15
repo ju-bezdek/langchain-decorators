@@ -75,3 +75,10 @@ New parameters in llm decorator
 ## Version 0.2.3 (2023-10-04)
 - Fix verbose result longing when not verbose mode
 - fix langchain logging warnings for using deprecated imports
+
+## Version 0.3.0 (2023-11-15)
+- Support for new OpenAI models (set as default, you can turn it off by setting env variable `LANGCHAIN_DECORATORS_USE_PREVIEW_MODELS=0` )
+- automatically turn on new OpenAI JSON mode if `dict` is the output type / JSON output parser
+- added timeouts to default models definitions
+- you can now reference input variables from `__self__` of the object the `llm_function` is bound to (not only the `llm_prompt`)
+- few bug fixes
