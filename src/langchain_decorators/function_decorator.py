@@ -45,7 +45,20 @@ def get_dynamic_function_template_args(func:Callable)->Tuple[List[str],List[str]
     
     return get_template_args(func_docs)
 
+class DotDict(dict):
+    def __init__(self, dictionary:dict):
+        super().__init__(dictionary)
+    
+    def __getattr__(self, name):
+        if name in self:
 
+            val = self.get(name)
+            if isinstance(val, dict):
+                return DotDict(val)
+            else:
+                return val
+        else:
+            return None
 
 def llm_function(
         function_name:str=None,
@@ -323,6 +336,7 @@ def build_func_schema(
             
 
 
+        
 def format_str_extra(template:str, **kwargs):
     optional_blocks_regex = list(re.finditer(r"\{\?(?P<optional_partial>.+?)(?=\?\})\?\}", template, re.MULTILINE | re.DOTALL))
     for optional_block in optional_blocks_regex:
@@ -338,8 +352,9 @@ def format_str_extra(template:str, **kwargs):
             else:
                 optional_partial = optional_block.group("optional_partial")
                 template = template.replace(optional_block.group(0),optional_partial )
-             
-    return Formatter().format(template, **kwargs)
+
+    _format_args={k:v if not isinstance(v,dict) else DotDict(v) for k,v in kwargs.items() }
+    return Formatter().format(template, **_format_args)
      
 
 def get_template_args(template:str)->Tuple[List[str],List[str]]:

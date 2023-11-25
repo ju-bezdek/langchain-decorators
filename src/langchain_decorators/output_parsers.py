@@ -130,7 +130,18 @@ class JsonOutputParser(BaseOutputParser):
             # Greedy search for 1st json candidate.
             match = self.find_json_block(text)
             json_str = match.group()
-            json_dict = json.loads(json_str, strict=False)
+            try:
+                json_dict = json.loads(json_str, strict=False)
+            except json.JSONDecodeError as e:
+                try:
+                    from json_repair import repair_json
+                    repair_json = repair_json(json_str)
+                    json_dict = json.loads(repair_json, strict=False)
+                    return json_dict
+                except ImportError:
+                    logging.warning("We might have been able to fix this output using json_repair. You can try json autorepair by installing json_repair package (`pip install json_repair`)")
+                    pass
+                raise e
             return json_dict
 
         except (json.JSONDecodeError) as e:

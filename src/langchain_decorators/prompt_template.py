@@ -264,7 +264,10 @@ class PromptDecoratorTemplate(StringPromptTemplate):
         template_string = get_function_docs(func)  
         template_name=template_name or get_function_full_name(func)
         return_type = get_func_return_type(func)
-      
+        
+        if original_kwargs.get("output_parser"):
+            output_parser = original_kwargs.pop("output_parser")
+        
         if output_parser=="auto":
             if return_type==str or return_type==None:
                 output_parser = "str"

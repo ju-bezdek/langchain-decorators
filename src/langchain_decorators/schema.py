@@ -108,8 +108,9 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
                     if "Cannot execute async function synchronously." in str(e):
                         raise RuntimeError("Cannot execute async function synchronously. Please use await execute_async() to generate the output of the function first") from e
             function_output = self.result
-
-        if not isinstance(function_output,str):
+        if isinstance(function_output,BaseModel):
+            function_output = function_output.json()
+        elif not isinstance(function_output,str):
             function_output = json.dumps(function_output)
 
         return FunctionMessage(name=self.function_name, content=function_output)

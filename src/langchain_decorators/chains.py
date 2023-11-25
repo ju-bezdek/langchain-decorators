@@ -348,7 +348,7 @@ class LLMDecoratorChain(LLMChain):
 
         llm = self.select_llm(prompts, input_list[0])
 
-        additional_kwargs={}
+        additional_kwargs=self.llm_kwargs or {}
         if isinstance(llm, ChatOpenAI):
             if llm.model_name in MODELS_WITH_JSON_FORMAT_SUPPORT and self.prompt.output_parser and self.prompt.output_parser._type=="json":
                 additional_kwargs["response_format"]= { "type": "json_object" }
@@ -375,7 +375,7 @@ class LLMDecoratorChain(LLMChain):
         """Generate LLM result from inputs."""
         prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
         llm = self.select_llm(prompts, input_list[0])
-        additional_kwargs={}
+        additional_kwargs=self.llm_kwargs or {}
         if isinstance(llm, ChatOpenAI):
             if llm.model_name in MODELS_WITH_JSON_FORMAT_SUPPORT and self.prompt.output_parser and self.prompt.output_parser._type=="json":
                 additional_kwargs["response_format"]= { "type": "json_object" }
@@ -463,7 +463,9 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
         return args
     
     def preprocess_inputs(self, input_list):
-        additional_kwargs={}
+        additional_kwargs=self.llm_kwargs or {}
+        
+
         final_function_schemas=None
         if self.functions:
             if self.memory is not None:

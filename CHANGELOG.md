@@ -82,3 +82,8 @@ New parameters in llm decorator
 - added timeouts to default models definitions
 - you can now reference input variables from `__self__` of the object the `llm_function` is bound to (not only the `llm_prompt`)
 - few bug fixes
+
+## Version 0.4.0 (2023-11-25)
+- Input kwargs augmentations by implementing the llm_prompt function (checkout example: [code_examples/augmenting_llm_prompt_inputs.py](https://github.com/ju-bezdek/langchain-decorators/code_examples/augmenting_llm_prompt_inputs.py) )
+- support for automatic json fix using if `json_repair` is installed 
+(*not even OpenAI JSON format is not yet perfect*)
