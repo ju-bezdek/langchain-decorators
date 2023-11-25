@@ -20,7 +20,9 @@ class TestCls:
         """
         # by implementing the @llm_prompt we can preprocess the arguments, which is useful to format them properly for the prompt template
         return {
-                "choices": "\n".join((f"{choice_id}) {choice}" for choice_id, choice in choices.items())), # formatting choices as a bullet list
+                # formatting choices as a bullet list
+                "choices": "\n".join((f"{choice_id}) {choice}" for choice_id, choice in choices.items())), 
+                # formatting choice ids (creating derived args)
                 "choices_ids": " | ".join(choices.keys()) # formatting choices as a comma separated list
             }
 
