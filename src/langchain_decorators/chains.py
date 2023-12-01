@@ -148,7 +148,7 @@ class LLMDecoratorChain(LLMChain):
     prompt_type:PromptTypeSettings = PromptTypes.UNDEFINED
     default_call_kwargs:Optional[Dict[str,Any]]
     _additional_instruction:Optional[str]=PrivateAttr()
-    _is_retry:Optional[str]=PrivateAttr()
+    _is_retry:Optional[str]=PrivateAttr(default=False)
 
 
 
@@ -402,7 +402,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
     function_call_output_key:str="function_call_info"
     function_output_key:str="function"
     message_output_key:str="message"
-    
+    _is_retry:Optional[str]=PrivateAttr(default=False)
 
     @property
     def output_keys(self) -> List[str]:
