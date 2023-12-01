@@ -66,6 +66,7 @@ def llm_function(
         docstring_format:str="auto",
         arguments_schema:Union[Type[BaseModel], Type[List[Any]]]=None,
         dynamic_schema:bool=False,
+        func_description:str=None,
         **kwargs
         ):
     """
@@ -162,6 +163,7 @@ def llm_function(
                                                 format=docstring_format, 
                                                 validate_docstrings=validate_docstrings,
                                                 arguments_schema=arguments_schema,
+                                                func_description=func_description,
                                                 schema_template_parameters=schema_template_args,
                                             )
         else:
@@ -170,6 +172,7 @@ def llm_function(
                                                 format=docstring_format, 
                                                 validate_docstrings=validate_docstrings,
                                                 arguments_schema=arguments_schema,
+                                                func_description=func_description,
                                                 schema_template_parameters=None,
                                             )
             def get_function_schema(_func, schema_template_args=None):
@@ -222,16 +225,20 @@ def build_func_schema(
         format:Union[DocstringsFormat,str]="auto", 
         validate_docstrings:bool=True,
         arguments_schema:Union[Type[BaseModel], Type[List[Any]], None] = None,
+        func_description:str=None,
         schema_template_parameters:Dict[str,Any]=None,
         ):
     
     if isinstance(format,str):
         format = DocstringsFormat(format)
 
-    func_docs = get_function_docs(func)  
+    if not (func_description and arguments_schema):
+        func_docs = get_function_docs(func)  
+        if schema_template_parameters:
+            func_docs = format_str_extra(func_docs, **schema_template_parameters)
+    else:
+        func_docs = None
 
-    if schema_template_parameters:
-        func_docs = format_str_extra(func_docs, **schema_template_parameters)
 
     if function_name and not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", function_name):
         raise ValueError(f"Invalid function name: {function_name} for {get_function_full_name(func)}. Only letters, numbers and underscores are allowed. The name must start with a letter or an underscore.")
@@ -324,7 +331,7 @@ def build_func_schema(
         return schema
     args_schema["properties"] = {prop:pop_prop_title(prop_schema) for prop, prop_schema in args_schema["properties"].items()}
     
-    description = parse_function_description_from_docstrings(func_docs) if func_docs else None
+    description = parse_function_description_from_docstrings(func_docs) if func_docs else func_description
 
     if not description:
         raise ValueError(f"LLM Function {get_function_full_name(func)} has no description in docstrings")
