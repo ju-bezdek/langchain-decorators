@@ -356,7 +356,11 @@ def get_func_return_type(func: callable, with_args:bool=False)->Union[Type, Tupl
         if get_origin(return_type) !=OutputWithFunctionCall and return_type!=OutputWithFunctionCall:
             return get_origin(return_type) if not with_args else (get_origin(return_type), get_args(return_type))
         else:
-            return get_args(return_type)[0]
+            args = get_args(return_type)
+            if args:
+                return args[0]
+            else:
+                return str
     else:
         return return_type if not with_args else (return_type, None)
             
