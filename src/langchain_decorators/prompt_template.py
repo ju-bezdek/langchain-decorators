@@ -288,7 +288,7 @@ class PromptDecoratorTemplate(StringPromptTemplate):
             elif return_type==bool:
                 output_parser = "boolean"
             elif issubclass(return_type, OutputWithFunctionCall):
-                return_type = "str"
+                output_parser = "str"
             elif issubclass(return_type,BaseModel):
                 output_parser = PydanticOutputParser(model=return_type)
             else:

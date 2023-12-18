@@ -87,3 +87,8 @@ New parameters in llm decorator
 - Input kwargs augmentations by implementing the llm_prompt function  (checkout example: [code_examples/augmenting_llm_prompt_inputs.py](https://github.com/ju-bezdek/langchain-decorators/blob/main/code_examples/augmenting_llm_prompt_inputs.py) )
 - support for automatic json fix using if `json_repair` is installed 
 (*not even OpenAI JSON format is not yet perfect*)
+
+## Version 0.4.1 (2023-12-18)
+- support for func_description passed as part of llm_function decorator
+- allowed not having func_description
+- minor fixes

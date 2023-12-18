@@ -17,8 +17,10 @@ from .chains import LLMDecoratorChainWithFunctionSupport, LLMDecoratorChain, Req
 from .common import *
 from .prompt_template import PromptDecoratorTemplate
 from .output_parsers import *
+from .schema import OutputWithFunctionCall
 from .streaming_context import StreamingContext
 from .function_decorator import is_dynamic_llm_func, get_dynamic_function_template_args
+
 
 SPECIAL_KWARGS=["callbacks","followup_handle","llm_selector_rule_key","memory","functions","function_call","capture_stream","llm_selector_rule_key", "stop", "output_parser", "llm_kwargs"]
 
@@ -115,8 +117,10 @@ def llm_prompt(
     
     def decorator(func):
         name=func.__name__
+
         full_name=f"{func.__module__}.{name}" if func.__module__!="__main__" else name
         is_async = inspect.iscoroutinefunction(func)
+        
         _llm_selector_rule_key=llm_selector_rule_key
 
 
@@ -133,10 +137,6 @@ def llm_prompt(
             global_settings = GlobalSettings.get_current_settings()
 
             capture_stream=_capture_stream
-
-            
-            
-
 
             if "capture_stream" in kwargs:
                 if not isinstance(capture_stream,bool):
@@ -401,6 +401,14 @@ def llm_prompt(
                 llmChain = build_chain(*args, **kwargs)
                 return llmChain.execute()
             wrapper.build_chain=build_chain
+            
+            if inspect.signature(func).parameters.get("functions"):
+                if not func.__annotations__.get('return') or func.__annotations__.get('return') == OutputWithFunctionCall:
+                    wrapper.__annotations__['return']= OutputWithFunctionCall
+                else:
+                    wrapper.__annotations__['return']= OutputWithFunctionCall[func.__annotations__.get('return') ]
+
+            
             return wrapper
         
         else:
@@ -419,6 +427,11 @@ def llm_prompt(
                 return await llmChain.aexecute()
             
             async_wrapper.build_chain=build_chain
+            if inspect.signature(func).parameters.get("functions"):
+                if not func.__annotations__.get('return') or func.__annotations__.get('return') == OutputWithFunctionCall  or func.__annotations__.get('return') ==  Coroutine[Any,Any,OutputWithFunctionCall]:
+                    async_wrapper.__annotations__['return'] = Coroutine[Any,Any,OutputWithFunctionCall]
+                else:
+                    async_wrapper.__annotations__['return'] = Coroutine[Any,Any,OutputWithFunctionCall[func.__annotations__.get('return') ]]
             return async_wrapper
     if func:
         return decorator(func)

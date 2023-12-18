@@ -333,13 +333,13 @@ def build_func_schema(
     
     description = parse_function_description_from_docstrings(func_docs) if func_docs else func_description
 
-    if not description:
-        raise ValueError(f"LLM Function {get_function_full_name(func)} has no description in docstrings")
-    return {
+    result_schema = {
         "name":func_name,
-        "description":description,
         "parameters":args_schema
     }
+    if description:
+        result_schema["description"]=description
+    return result_schema
             
 
 

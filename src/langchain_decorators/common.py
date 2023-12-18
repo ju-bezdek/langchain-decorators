@@ -13,6 +13,7 @@ from langchain.llms.base import BaseLanguageModel
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import BaseMessage
 from langchain.prompts.chat import ChatMessagePromptTemplate
+from .schema import OutputWithFunctionCall
 from typing_inspect import is_generic_type, is_union_type
 
 import pydantic
@@ -186,17 +187,17 @@ class GlobalSettings(BaseModel):
         """
         if llm_selector is None and default_llm is None and default_streaming_llm is None:
             # only use llm_selector if no default_llm and default_streaming_llm is defined, because than we dont know what rules to set up
-            default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106" if USE_PREVIEW_MODELS else "gpt-3.5-turbo", request_timeout=90) #  '-0613' - has function calling
+            default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106" if USE_PREVIEW_MODELS else "gpt-3.5-turbo", request_timeout=30) #  '-0613' - has function calling
             default_streaming_llm = make_llm_streamable(default_llm)
             llm_selector = LlmSelector()\
                 .with_llm(default_llm, llm_selector_rule_key="chatGPT")\
-                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview"  if USE_PREVIEW_MODELS else "gpt-3.5-turbo-16k",  request_timeout=120), llm_selector_rule_key="GPT4")\
+                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview"  if USE_PREVIEW_MODELS else "gpt-3.5-turbo-16k",  request_timeout=60), llm_selector_rule_key="GPT4")\
                 #.with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106"), llm_selector_rule_key="chatGPT")\
                 #.with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-32k"), llm_selector_rule_key="GPT4") 
         
         else:
             if default_llm is None:
-                default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106" if USE_PREVIEW_MODELS else "gpt-3.5-turbo", request_timeout=90)  #  '-0613' - has function calling
+                default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106" if USE_PREVIEW_MODELS else "gpt-3.5-turbo", request_timeout=60)  #  '-0613' - has function calling
             if default_streaming_llm is None:
                 default_streaming_llm = make_llm_streamable(default_llm)
             
@@ -352,7 +353,10 @@ def get_func_return_type(func: callable, with_args:bool=False)->Union[Type, Tupl
             raise Exception(f"Invalid Union annotation {return_type}. Expected Union[ <return_type>, None] or just <return_type>")
     elif is_generic_type(return_type):
         # this should cover list and dict
-        return get_origin(return_type) if not with_args else (get_origin(return_type), get_args(return_type))
+        if get_origin(return_type) !=OutputWithFunctionCall and return_type!=OutputWithFunctionCall:
+            return get_origin(return_type) if not with_args else (get_origin(return_type), get_args(return_type))
+        else:
+            return get_args(return_type)[0]
     else:
         return return_type if not with_args else (return_type, None)
             
