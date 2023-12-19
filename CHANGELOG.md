@@ -92,3 +92,6 @@ New parameters in llm decorator
 - support for func_description passed as part of llm_function decorator
 - allowed not having func_description
 - minor fixes
+
+## Version 0.4.2 (2023-12-20)
+- critical bugfix - Assistant messages without context (text) but only with arguments were ignored
