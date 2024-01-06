@@ -41,7 +41,7 @@ class OutputParserExceptionWithOriginal(OutputParserException):
 
 
 class ListOutputParser(BaseOutputParser):
-    """Class to parse the output of an LLM call to a list."""
+    """Class to parse the output of an LLM call in a bullet/numbered list format to a list."""
 
     @property
     def _type(self) -> str:

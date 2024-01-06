@@ -158,8 +158,10 @@ def build_template_drafts(template:str, format:str, role:str=None )->PromptTempl
                     return _partial
             
             partial_builders[partial_name] = partial_formatter
-
-    input_variables = [v for _, v, _, _ in Formatter().parse(template) if v is not None and v not in partials_with_params]
+    try:
+        input_variables = [v for _, v, _, _ in Formatter().parse(template) if v is not None and v not in partials_with_params]
+    except ValueError as e:
+        raise ValueError(f"{e}\nError parsing template: \n```\n{template}\n```")
     for partial_name, (partial, partial_input_variables) in partials_with_params.items():
         input_variables.extend(partial_input_variables)
 
@@ -360,8 +362,8 @@ class PromptDecoratorTemplate(StringPromptTemplate):
             
             for message_draft in self.prompt_template_drafts:
                 msg_template_final_str = message_draft.finalize_template(kwargs)
-                
-                parts.append((msg_template_final_str,message_draft.role))
+                if msg_template_final_str: # skip empty messages / templates
+                    parts.append((msg_template_final_str,message_draft.role))
 
         else:
             msg_template_final_str = self.prompt_template_drafts.finalize_template(kwargs)

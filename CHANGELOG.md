@@ -95,3 +95,6 @@ New parameters in llm decorator
 
 ## Version 0.4.2 (2023-12-20)
 - critical bugfix - Assistant messages without context (text) but only with arguments were ignored
+
+## Version 0.5.0 (2024-01-06)
+- ability to pass in function to augment function arguments before executing in OutputWithFunctionCall

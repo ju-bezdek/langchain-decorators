@@ -38,14 +38,17 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
     def support_sync(self):
         return bool(self.function)
 
-    async def execute_async(self):
+    async def execute_async(self, augment_args:Callable[[Dict[str,Any]],Dict[str,Any]]=None):
         """Executes the function asynchronously."""
         if not (self.function or self.function_async):
             raise ValueError("No function to execute")
+        call_args = self.function_arguments or {}
+        if augment_args:
+            call_args = augment_args(call_args)
         if self.function_async:
-            result= await self.function_async(**(self.function_arguments or {}))
+            result= await self.function_async(**call_args)
         else:
-            result= self.function(**(self.function_arguments or {}))
+            result= self.function(**call_args)
             if result and asyncio.iscoroutine(result):
                 # this handles special scenario when fake @llm_function is used
                 result = await result
@@ -53,14 +56,18 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
         self._result_generated=True
         return result
         
-    def execute(self):
+    def execute(self, augment_args:Callable[[Dict[str,Any]],Dict[str,Any]]=None):
         """ Executes the function synchronously. 
         If the function is async, it will be executed in a event loop.
         """
         if not (self.function or self.function_async):
             raise ValueError("No function to execute")
+        call_args = self.function_arguments or {}
+        if augment_args:
+            call_args = augment_args(**call_args)
+
         if self.function:
-            result= self.function(**(self.function_arguments or {}))
+            result= self.function(**call_args)
         else:
             try:
                 current_loop = asyncio.get_running_loop()
@@ -111,7 +118,7 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
         if isinstance(function_output,BaseModel):
             function_output = function_output.json()
         elif not isinstance(function_output,str):
-            function_output = json.dumps(function_output)
+            function_output = repr(function_output)
 
         return FunctionMessage(name=self.function_name, content=function_output)
 
