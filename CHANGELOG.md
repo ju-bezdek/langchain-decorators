@@ -98,3 +98,6 @@ New parameters in llm decorator
 
 ## Version 0.5.0 (2024-01-06)
 - ability to pass in function to augment function arguments before executing in OutputWithFunctionCall
+
+## Version 0.5.1 (2024-02-12)
+- break hard dependency on promptwatch

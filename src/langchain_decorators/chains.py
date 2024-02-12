@@ -7,7 +7,7 @@ from langchain.prompts import  PromptTemplate
 from langchain.schema import LLMResult
 from langchain.callbacks.manager import CallbackManagerForChainRun, AsyncCallbackManagerForChainRun, Callbacks
 from langchain.tools.base import BaseTool
-from langchain.chat_models import ChatOpenAI
+
 from langchain.chat_models.base import BaseChatModel
 from langchain.callbacks.base import BaseCallbackHandler, BaseCallbackManager
 from langchain.schema.output import LLMResult
@@ -15,7 +15,7 @@ from langchain.prompts.base import StringPromptValue
 from langchain.prompts.chat import  ChatPromptValue
 from langchain.prompts.chat import  ChatPromptValue
 from langchain.schema import ChatGeneration, BaseMessage, HumanMessage, AIMessage
-from promptwatch import CachedChatLLM, register_prompt_template
+
 from .common import LlmSelector, print_log, LogColors, PromptTypeSettings, PromptTypes
 from .schema import OutputWithFunctionCall
 from .prompt_template import PromptDecoratorTemplate
@@ -30,11 +30,19 @@ else:
     from pydantic.v1.fields import PrivateAttr
     from pydantic.v1.class_validators import root_validator
 
+CachedChatLLM = None
+register_prompt_template = None
 try:
     from langchain.tools.convert_to_openai import format_tool_to_openai_function
+    from promptwatch import CachedChatLLM, register_prompt_template
 except ImportError:
     pass
 
+try:
+    from langchain_openai import ChatOpenAI
+except ImportError:
+    ChatOpenAI = None
+    pass
 
 MODELS_WITH_JSON_FORMAT_SUPPORT=["gpt-3.5-turbo-1106","gpt-4-1106-preview"]
 
@@ -144,16 +152,12 @@ class LLMDecoratorChain(LLMChain):
     llm_selector_rule_key:Optional[str]=None
     allow_retries:bool=True
     format_instructions_parameter_key:str="FORMAT_INSTRUCTIONS",
-    
+
     prompt_type:PromptTypeSettings = PromptTypes.UNDEFINED
     default_call_kwargs:Optional[Dict[str,Any]]
     _additional_instruction:Optional[str]=PrivateAttr()
     _is_retry:Optional[str]=PrivateAttr(default=False)
 
-
-
-
-    
     def __call__(self, 
                  inputs: Union[Dict[str, Any], Any]=None, 
                  return_only_outputs: bool = False, 
@@ -217,8 +221,7 @@ class LLMDecoratorChain(LLMChain):
             for k,v in self.default_call_kwargs.items():
                 if kwargs.get(k,None) is None and k in self.default_call_kwargs:
                     kwargs[k]=v
-        
-        
+
         try:
             result = await super().acall(**kwargs)
         except RequestRetry as e:
@@ -230,14 +233,12 @@ class LLMDecoratorChain(LLMChain):
         self._additional_instruction=None
         return result
 
-
     def execute(self,**kwargs):
         """Execute the chain and return outputs"""
         print_log(log_object=f"> Entering {self.name} prompt decorator chain", log_level=self.prompt_type.log_level ,color=LogColors.WHITE_BOLD)
-        
-        
+
         result_data = self.__call__(**kwargs)
-        
+
         result = result_data[self.output_key]
         try:
             result = self.postprocess_outputs(result_data, result)
@@ -251,28 +252,28 @@ class LLMDecoratorChain(LLMChain):
                 return self.postprocess_outputs(result_data, result)
             else: 
                 raise e
-        
+
         print_log(log_object=f"> Finished chain", log_level=self.prompt_type.log_level,color=LogColors.WHITE_BOLD)
         return result
-    
+
     async def aexecute(self,**kwargs):
         """Execute the chain and return outputs"""
         print_log(log_object=f"> Entering {self.name} prompt decorator chain", log_level=self.prompt_type.log_level ,color=LogColors.WHITE_BOLD)
-        
+
         try:
             result_data = await self.acall(**kwargs)
-            
+
             result = result_data[self.output_key]
-        
+
             result = self.postprocess_outputs(result_data, result)
         except RequestRetry as e:
             if self._is_retry==True:
                 raise Exception(e.feedback)
             self._is_retry=True
             result_data = await self.acall(**kwargs, additional_instruction=e.feedback)
-            
+
             result = result_data[self.output_key]
-        
+
             result = self.postprocess_outputs(result_data, result)
         except OutputParserExceptionWithOriginal as e:
             if self.allow_retries:
@@ -284,10 +285,10 @@ class LLMDecoratorChain(LLMChain):
                 return self.postprocess_outputs(result_data, result)
             else: 
                 raise e
-        
+
         print_log(log_object=f"> Finished chain", log_level=self.prompt_type.log_level,color=LogColors.WHITE_BOLD)
         return result
-    
+
     def _get_retry_parse_call_args(self,prompt_template:PromptDecoratorTemplate, exception:OutputParserExceptionWithOriginal, get_original_prompt:Callable):
         logging.warning(msg=f"Failed to parse output for {self.name}: {exception}\nRetrying...")
         if hasattr(self.prompt, "template_string") and self.format_instructions_parameter_key not in self.prompt.template_string:
@@ -298,14 +299,13 @@ class LLMDecoratorChain(LLMChain):
             original_prompt=""
         retry_parse_template = PromptTemplate.from_template("{original_prompt}This is our original response {original} but it's not in correct format, please convert it into following format:\n{format_instructions}\n\nIf the response doesn't seem to be relevant to the expected format instructions, return 'N/A'")
         register_prompt_template("retry_parse_template", retry_parse_template)
-        
+
         retryChain = LLMChain(llm=self.llm, prompt=retry_parse_template)
         format_instructions = prompt_template.output_parser.get_format_instructions()
         if not format_instructions:
             raise Exception(f"Failed to get format instructions for {self.name} from output parser {prompt_template.output_parser}.")
         call_kwargs = {"original_prompt":original_prompt, "original":exception.original, "format_instructions":format_instructions}
         return retryChain, call_kwargs
-
 
     def postprocess_outputs(self, result_data, result):
         log_results(result_data, result, is_function_call=False, verbose=self.verbose, prompt_type=self.prompt_type)
@@ -316,7 +316,7 @@ class LLMDecoratorChain(LLMChain):
                 except:
                     result = False if result and "yes" in result.lower() else False # usually its something like "Im sorry..."
         return result
-    
+
     def select_llm(self, prompts, inputs=None):
         if self.llm_selector:
             # we pick the right LLM based on the first prompt
@@ -330,7 +330,7 @@ class LLMDecoratorChain(LLMChain):
         else:
             llm = self.llm
         return llm
-    
+
     def _additional_llm_selector_args(self, inputs):
         return {
             "expected_generated_tokens":self.expected_gen_tokens, 
@@ -349,7 +349,7 @@ class LLMDecoratorChain(LLMChain):
         llm = self.select_llm(prompts, input_list[0])
 
         additional_kwargs=self.llm_kwargs or {}
-        if isinstance(llm, ChatOpenAI):
+        if ChatOpenAI and isinstance(llm, ChatOpenAI):
             if llm.model_name in MODELS_WITH_JSON_FORMAT_SUPPORT and self.prompt.output_parser and self.prompt.output_parser._type=="json":
                 additional_kwargs["response_format"]= { "type": "json_object" }
 
@@ -376,7 +376,7 @@ class LLMDecoratorChain(LLMChain):
         prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
         llm = self.select_llm(prompts, input_list[0])
         additional_kwargs=self.llm_kwargs or {}
-        if isinstance(llm, ChatOpenAI):
+        if ChatOpenAI and isinstance(llm, ChatOpenAI):
             if llm.model_name in MODELS_WITH_JSON_FORMAT_SUPPORT and self.prompt.output_parser and self.prompt.output_parser._type=="json":
                 additional_kwargs["response_format"]= { "type": "json_object" }
         try:
@@ -395,10 +395,9 @@ class LLMDecoratorChain(LLMChain):
 
 class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
 
-
     functions:Union[FunctionsProvider,List[Union[Callable, BaseTool]]]
     func_name_map:dict=None
-    
+
     function_call_output_key:str="function_call_info"
     function_output_key:str="function"
     message_output_key:str="message"
@@ -412,7 +411,6 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
         """
         return [self.output_key, self.function_output_key, self.function_call_output_key]
 
-    
     def postprocess_outputs(self, result_data, result):
         log_results(result_data, result, bool(self.functions.functions), self.verbose, self.prompt_type)
 
@@ -421,15 +419,14 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
                 # it the output parser is OpenAIFunctionsPydanticOutputParser, it means we should return the regular result, since we've used functions only for structure calling
                 # there is no result probably, but if there is, we ignore it... we are interested only in tha data in function_call_info
                 result = self.prompt.output_parser.parse(result_data["function_call_info"]["arguments"])
-                #we dont want to return  OutputWithFunctionCall in this case
-                # TODO: Hardcoded for now... 
+                # we dont want to return  OutputWithFunctionCall in this case
+                # TODO: Hardcoded for now...
                 return result
             else:
                 if result:
                     result = self.prompt.output_parser.parse(result)
-        
+
         return self._generate_output_with_function_call(result, result_data)
-        
 
     @root_validator(pre=True)
     def validate_and_prepare_chain(cls, values):
@@ -441,30 +438,27 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
             values["functions"] = functions
         elif functions:
             raise ValueError(f"functions must be a List[Callable|BaseTool] or FunctionsProvider instance. Got: {functions.__class__}")
-        
+
         if not llm:
             raise ValueError("llm must be defined")
-        
-        
-        if not isinstance(llm,ChatOpenAI) and not isinstance(llm, CachedChatLLM):
+
+        if not "OpenAI" in type(llm).__name__ and (
+            CachedChatLLM and not isinstance(llm, CachedChatLLM)
+        ):
             raise ValueError(f"llm must be a ChatOpenAI instance. Got: {llm}")
-        
 
         return values
-    
 
     def get_final_function_schemas(self, inputs):
         return self.functions.get_function_schemas(inputs)
 
-            
     def _additional_llm_selector_args(self, inputs):
         args = super()._additional_llm_selector_args(inputs)
         args["function_schemas"]=self.get_final_function_schemas(inputs)
         return args
-    
+
     def preprocess_inputs(self, input_list):
-        additional_kwargs=self.llm_kwargs or {}
-        
+        additional_kwargs = self.llm_kwargs or {}
 
         final_function_schemas=None
         if self.functions:
@@ -473,7 +467,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
                 if hasattr(self.memory, "output_key") and not self.memory.output_key:
                     self.memory.output_key = "message"
             if len(input_list)!=1:
-                    raise ValueError("Only one input is allowed when using functions")
+                raise ValueError("Only one input is allowed when using functions")
             if "function_call" in input_list[0]:
                 for input in input_list:
                     function_call=input.pop("function_call")
@@ -493,17 +487,15 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
             final_function_schemas = self.get_final_function_schemas(input_list[0])
         return additional_kwargs, final_function_schemas
 
-
-
     def generate(
         self,
         input_list: List[Dict[str, Any]],
         run_manager: Optional[CallbackManagerForChainRun] = None,
     ) -> LLMResult:
         """Generate LLM result from inputs."""
-        
+
         additional_kwargs, final_function_schemas = self.preprocess_inputs(input_list)
-       
+
         prompts, stop = self.prep_prompts(input_list, run_manager=run_manager)
         chat_model:BaseChatModel=self.select_llm(prompts, input_list[0])
         def run():
@@ -528,7 +520,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
                 return run()
             else:
                 raise Exception(e.feedback)
-        
+
     async def agenerate(
         self,
         input_list: List[Dict[str, Any]],
@@ -536,7 +528,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
     ) -> LLMResult:
         """Generate LLM result from inputs."""
         additional_kwargs, final_function_schemas = self.preprocess_inputs(input_list)
-    
+
         prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
         chat_model:BaseChatModel=self.select_llm(prompts, input_list[0])
 
@@ -554,7 +546,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
                 return await chat_model.agenerate_prompt(
                     prompts, stop, callbacks=run_manager.get_child() if run_manager else None
                 )
-        
+
         try:
             return await arun(additional_instruction=self._additional_instruction)
         except RequestRetry as e:
@@ -563,7 +555,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
                 return await arun(self._additional_instruction)
             else:
                 raise Exception(e.feedback)
-            
+
     def _create_output(self,generation):
         res = {
                 self.output_key: generation.text,
@@ -596,22 +588,19 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
 
     def get_function(self,function_name):
         return self.functions.get_function(function_name)
-    
 
     def create_outputs(self, response: LLMResult) -> List[Dict[str, str]]:
         """Create outputs from response."""
-        
+
         return [
             self._create_output(generation[0])
             for generation in response.generations
         ]
 
-
-
     def _generate_output_with_function_call(self,result:Any, result_data:dict):
         """ get parsed result, function call data from llm and list of functions and build  OutputWithFunctionCall """
         # find the function first:
-        
+
         _function = result_data["function"]
         if result_data.get("function_call_info"):
             _tool_arguments = result_data["function_call_info"]["arguments"]
@@ -622,17 +611,19 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
                 _tool_arguments = tool_input
                 def _sync_function(arguments=tool_input):
                     return _function.run(tool_input=arguments, verbose=self.verbose, callbacks=self.callbacks)
-                
+
                 async def _async_function(arguments=tool_input):
-                    return await _function.arun(tool_input=arguments, verbose=self.verbose, callbacks=self.callbacks)
-                    
-                
+                    return await _function.arun(
+                        tool_input=arguments,
+                        verbose=self.verbose,
+                        callbacks=self.callbacks,
+                    )
 
             elif callable(_function):
                 # TODO: add support for verbose and callbacks
-                
+
                 is_async = inspect.iscoroutinefunction(_function)
-                
+
                 if is_async:
                     _async_function = _function
                     _sync_function = None
@@ -658,9 +649,6 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
                     output_message=result_data["message"],
                     output_text=result_data["text"],
                 )
-
-
-
 
 
 class FollowupHandle(BaseCallbackHandler):
@@ -714,7 +702,7 @@ class FollowupHandle(BaseCallbackHandler):
     def ignore_chat_model(self) -> bool:
         """Whether to ignore chat model callbacks."""
         return False
-    
+
     def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any], *args, **kwargs) -> Any:
         self.last_inputs=inputs
 
@@ -723,14 +711,13 @@ class FollowupHandle(BaseCallbackHandler):
             raise Exception(f"Invalid messages length {len(messages)}. FollowupHandle only supports one prompt at a time.")
         self.last_messages = messages
         self.last_prompts=None
-        
-        
+
     def on_llm_start(self,serialized:dict, prompts: List[str], *args, **kwargs):
         if len(prompts)!=1:
             raise Exception(f"Invalid prompts length {len(prompts)}. FollowupHandle only supports one prompt at a time.")
         self.last_prompts = prompts
         self.last_messages=None
-    
+
     def on_llm_end(
         self,
         response: LLMResult,
@@ -739,15 +726,12 @@ class FollowupHandle(BaseCallbackHandler):
     ) -> None:
         self.last_response_generations = response.generations
 
-    
-
-
     def _prepare_followup_chain_with_args(self, followup_content:Union[str, BaseMessage],with_functions:bool):
         if self.last_response_generations is None:
             raise Exception("No response from LLM yet. Can't followup before the prompt has been executed")
         if len(self.last_response_generations)!=1:
             raise Exception(f"Invalid response generations length {len(self.last_response_generations)}. FollowupHandle only supports one generated response")
-        
+
         llm = self.chain.select_llm( self.last_prompts or [ChatPromptValue(messages=self.last_messages[0])], self.last_inputs)
 
         if self.last_messages:
@@ -756,14 +740,14 @@ class FollowupHandle(BaseCallbackHandler):
             msg_list.append(last_response_msg)
             if isinstance(followup_content, str):
                 followup_content = HumanMessage(content=followup_content)
-            
+
             msg_list.append(followup_content)
             new_prompt = ChatPromptValue(messages=msg_list)
         elif self.last_prompts:
             new_prompt = StringPromptValue(self.last_prompts[0] + self.last_response_generations[0][0].text + "\n" + followup_content)
         else:
             raise Exception("Last generation has not been recorded")
-        
+
         if with_functions and not isinstance(self.chain,LLMDecoratorChainWithFunctionSupport):
             raise Exception("followup can only by used with functions if the the original llm_prompt was called with functions")
         kwargs = {
@@ -773,12 +757,9 @@ class FollowupHandle(BaseCallbackHandler):
         }
         if with_functions:
             kwargs["functions"]=self.chain.get_final_function_schemas(self.last_inputs)
-    
+
         return llm, kwargs
 
-    
-
-        
     def _process_llm_output(self, llm_result, with_functions, with_output_parser):
         generation = llm_result.generations[0][0]
         if with_output_parser:
@@ -794,31 +775,29 @@ class FollowupHandle(BaseCallbackHandler):
         else:
             if with_functions:
                 raise Exception("LLM does not support functions")
-        
+
         return result
-    
 
     def followup(self, followup_content:Union[str, BaseMessage], with_functions:bool=False, with_output_parser:BaseOutputParser=None) ->Union[str, OutputWithFunctionCall, Any]:
-        
+
         llm, kwargs = self._prepare_followup_chain_with_args(followup_content, with_functions=with_functions)
-        
+
         result = llm.generate_prompt(**kwargs)
 
         return self._process_llm_output(result, with_functions,with_output_parser)
 
-        
     async def afollowup(self, followup_content:Union[str, BaseMessage],  with_functions:bool=False, with_output_parser:BaseOutputParser=None) ->Union[str, OutputWithFunctionCall, Any]:
         llm, kwargs = self._prepare_followup_chain_with_args(followup_content, with_functions=with_functions)
         result = await llm.agenerate_prompt(**kwargs)
         return self._process_llm_output(result, with_functions, with_output_parser)
-        
-        
+
+
 class RequestRetry(Exception):
 
     def __init__(self, feedback:str=None):
         super().__init__()
         self.feedback=feedback
-    
+
 
 def log_results(result_data, result, is_function_call=False, verbose=False, prompt_type=None):
     if verbose or prompt_type:

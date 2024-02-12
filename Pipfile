@@ -8,6 +8,7 @@ langchain_decorators = {editable = true, path = "."}
 promptwatch="*"
 pydantic = "*"
 langchain = "*"
+langchain-openai = "*"
 
 [dev-packages]
 ipykernel = "*"
