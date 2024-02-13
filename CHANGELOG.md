@@ -101,3 +101,6 @@ New parameters in llm decorator
 
 ## Version 0.5.1 (2024-02-12)
 - break hard dependency on promptwatch
+- 
+## Version 0.5.2+3 (2024-02-13)
+- fix using functions on AzureOpenAI

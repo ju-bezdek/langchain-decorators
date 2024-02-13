@@ -442,10 +442,10 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
         if not llm:
             raise ValueError("llm must be defined")
 
-        if not "OpenAI" in type(llm).__name__ and (
-            CachedChatLLM and not isinstance(llm, CachedChatLLM)
-        ):
-            raise ValueError(f"llm must be a ChatOpenAI instance. Got: {llm}")
+        # if not "OpenAI" in type(llm).__name__ and (
+        #     CachedChatLLM and not isinstance(llm, CachedChatLLM)
+        # ):
+        #     raise ValueError(f"llm must be a ChatOpenAI instance. Got: {llm}")
 
         return values
 
