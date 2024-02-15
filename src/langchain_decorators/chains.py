@@ -44,7 +44,7 @@ except ImportError:
     ChatOpenAI = None
     pass
 
-MODELS_WITH_JSON_FORMAT_SUPPORT=["gpt-3.5-turbo-1106","gpt-4-1106-preview"]
+MODELS_WITH_JSON_FORMAT_SUPPORT=["gpt-3.5-turbo-1106","gpt-4-1106-preview", "gpt-3.5-turbo-0125", "gpt-4-0125-preview"]
 
 
 class FunctionsProvider:
@@ -337,6 +337,12 @@ class LLMDecoratorChain(LLMChain):
             "streaming":self.capture_stream,
             "llm_selector_rule_key":self.llm_selector_rule_key
             }
+    
+    def __should_use_json_response_format(self, llm):
+        if "OpenAI" in type(llm).__name__:
+            if llm.model_name in MODELS_WITH_JSON_FORMAT_SUPPORT and self.prompt.output_parser and (self.prompt.output_parser._type=="json" or self.prompt.output_parser._type=="pydantic"):
+                return True
+    
 
     def generate(
         self,
@@ -349,9 +355,8 @@ class LLMDecoratorChain(LLMChain):
         llm = self.select_llm(prompts, input_list[0])
 
         additional_kwargs=self.llm_kwargs or {}
-        if ChatOpenAI and isinstance(llm, ChatOpenAI):
-            if llm.model_name in MODELS_WITH_JSON_FORMAT_SUPPORT and self.prompt.output_parser and self.prompt.output_parser._type=="json":
-                additional_kwargs["response_format"]= { "type": "json_object" }
+        if self.__should_use_json_response_format(llm):
+            additional_kwargs["response_format"]= { "type": "json_object" }
 
         try:
             return llm.generate_prompt(
@@ -376,9 +381,8 @@ class LLMDecoratorChain(LLMChain):
         prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
         llm = self.select_llm(prompts, input_list[0])
         additional_kwargs=self.llm_kwargs or {}
-        if ChatOpenAI and isinstance(llm, ChatOpenAI):
-            if llm.model_name in MODELS_WITH_JSON_FORMAT_SUPPORT and self.prompt.output_parser and self.prompt.output_parser._type=="json":
-                additional_kwargs["response_format"]= { "type": "json_object" }
+        if self.__should_use_json_response_format(llm):
+            additional_kwargs["response_format"]= { "type": "json_object" }
         try:
             return await llm.agenerate_prompt(
                 prompts, stop, callbacks=run_manager.get_child() if run_manager else None

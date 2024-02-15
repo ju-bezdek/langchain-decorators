@@ -102,5 +102,6 @@ New parameters in llm decorator
 ## Version 0.5.1 (2024-02-12)
 - break hard dependency on promptwatch
 - 
-## Version 0.5.2+3 (2024-02-13)
-- fix using functions on AzureOpenAI
+
+## Version 0.5.4 (2024-02-14)
+- add new models that support response_format="json"
