@@ -91,12 +91,21 @@ class BooleanOutputParser(BaseOutputParser):
 
 class JsonOutputParser(BaseOutputParser):
     """Class to parse the output of an LLM call to a Json."""
-    
+
     @property
     def _type(self) -> str:
         return "json"
-    
+
     def find_json_block(self,text, raise_if_not_found=True):
+
+        start_code_block = list(re.finditer(r"(\n|^)```((json)|\n)", text))
+        if start_code_block:
+            i_start = start_code_block[0].span()[1]
+            end_code_block = list(re.finditer(r"\n```($|\n)", text[i_start:]))
+            if end_code_block:
+                i_end = end_code_block[0].span()[0]
+                text = text[i_start : i_start + i_end]
+
         match = re.search(r"[\{|\[].*[\}|\]]", text.strip(),
                               re.MULTILINE | re.IGNORECASE | re.DOTALL)
         if not match and raise_if_not_found:
@@ -105,7 +114,7 @@ class JsonOutputParser(BaseOutputParser):
 
     def replace_json_block(self, text: str, replace_func:Callable[[dict],str]) -> str:
         try:
-            
+
             match = self.find_json_block(text)
             json_str = match.group()
             i_start = match.start()
@@ -118,7 +127,6 @@ class JsonOutputParser(BaseOutputParser):
             json_dict = json.loads(json_str, strict=False)
             replacement = replace_func(json_dict)
             return (text[:i_start] + replacement + text[i_end:]).strip()
-            
 
         except (json.JSONDecodeError) as e:
 
