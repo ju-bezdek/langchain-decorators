@@ -106,5 +106,8 @@ New parameters in llm decorator
 ## Version 0.5.4 (2024-02-14)
 - add new models that support response_format="json"
 
-## Version 0.5.4 (2024-04-02)
+## Version 0.5.5 (2024-04-02)
 - minor improvement in JSON output parser
+
+## Version 0.5.6 (2024-04-14)
+- minor improvement in llm func docs parser to handle arg description not starting with letter

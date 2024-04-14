@@ -217,6 +217,24 @@ write_name_suggestions(company_business="sells cookies", count=5)
         -  `numpy`: the docstring is parsed as markdown (see [Numpy docstring format](https://numpydoc.readthedocs.io/en/latest/format.html))
         -  `sphinx`: the docstring is parsed as sphinx format (see [Sphinx docstring format](https://sphinx-rtd-tutorial.readthedocs.io/en/latest/docstrings.html))
 
+### Enum arguments
+
+The best way how to define enum is through type annotation using `Literal`:
+```python
+@llm_function
+def do_magic(spell:str, strength:Literal["light","medium","strong"]):
+    """
+    Do some kind of magic
+
+    Args:
+        spell (str): spall text
+        strength (str): the strength of the spell
+    """
+
+```
+
+---
+**Enum alternative to Literal**
 To annotate an *"enum"* like argument, you can use this "typescript" like format: `["value_a" | "value_b"]` ... if will be parsed out.
 This text will be a part of a description too... if you dont want it, you can use this notation as a type notation.
 Example:
@@ -236,13 +254,13 @@ from langchain.agents import load_tools
 from langchian_decorators import llm_function, llm_prompt, GlobalSettings
 
 @llm_function
-def send_message(message:str, addressee:str=None, message_type:str="email"):
+def send_message(message:str, addressee:str=None, message_type:Literal["email", "whatsapp"]="email"):
     """ Use this if user asks to send some message
 
     Args:
         message (str): message text to send
-        addressee (str): email of the adressese... in format firstName.lastName@company.com
-        message_type (str, optional): enum: ["email"|"whatsapp"]
+        addressee (str): email of the addressee... in format firstName.lastName@company.com
+        message_type (str, optional): style of message by platform
     """
 
     if message_type=="email":
@@ -259,10 +277,10 @@ list_of_other_tools = load_tools(
 @llm_prompt
 def do_what_user_asks_for(user_input:str, functions:List[Union[Callable,BaseTool]]):
     """ 
-    ``` <prompt:system>
+    ```<prompt:system>
     Your role is to be a helpful asistant.
     ```
-    ``` <prompt:user>
+    ```<prompt:user>
     {user_input}
     ```
     """
