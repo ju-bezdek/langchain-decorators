@@ -111,3 +111,10 @@ New parameters in llm decorator
 
 ## Version 0.5.6 (2024-04-14)
 - minor improvement in llm func docs parser to handle arg description not starting with letter
+
+## Version 0.5.7 (2024-04-18)
+- fix json/dict output for async
+- support for llm control kwarg to by able to pass in llm dynamically
+
+## Version 0.5.8 (2024-04-18)
+- hotfix, unbound variable error
