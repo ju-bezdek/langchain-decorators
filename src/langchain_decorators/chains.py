@@ -1,7 +1,7 @@
 import inspect
 import json
 import logging
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Union, cast
 
 import pydantic
 from langchain.callbacks.base import BaseCallbackHandler, BaseCallbackManager
@@ -19,11 +19,13 @@ from langchain.schema import (
     AIMessage,
     BaseMessage,
     ChatGeneration,
+    Generation,
     HumanMessage,
     LLMResult,
 )
 from langchain.schema.output import LLMResult
 from langchain.tools.base import BaseTool
+from langchain_core.language_models import BaseLanguageModel, LanguageModelInput
 
 from .common import LlmSelector, LogColors, PromptTypes, PromptTypeSettings, print_log
 from .function_decorator import get_function_schema
@@ -507,29 +509,31 @@ class LLMDecoratorChain(LLMChain):
         """Generate LLM result from inputs."""
         prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
         llm = self.select_llm(prompts, input_list[0])
+        callbacks = run_manager.get_child() if run_manager else None
         additional_kwargs = self.llm_kwargs or {}
         if self.__should_use_json_response_format(llm):
             additional_kwargs["response_format"] = {"type": "json_object"}
         if self.llm_kwargs:
-            additional_kwargs["llm_kwargs"] = self.llm_kwargs
-        try:
+            additional_kwargs.update(self.llm_kwargs)
+        if isinstance(llm, BaseLanguageModel):
             return await llm.agenerate_prompt(
                 prompts,
                 stop,
-                callbacks=run_manager.get_child() if run_manager else None,
+                callbacks=callbacks,
                 **additional_kwargs,
             )
-        except RequestRetry as e:
-            if not self._is_retry == True:
-                self._is_retry = True
-                return await llm.agenerate_prompt(
-                    prompts,
-                    stop,
-                    callbacks=run_manager.get_child() if run_manager else None,
-                    **additional_kwargs,
-                )
-            else:
-                raise Exception(e.feedback)
+
+        else:
+            results = await llm.bind(stop=stop, **additional_kwargs).abatch(
+                cast(List, prompts), {"callbacks": callbacks}
+            )
+            generations: List[List[Generation]] = []
+            for res in results:
+                if isinstance(res, BaseMessage):
+                    generations.append([ChatGeneration(message=res)])
+                else:
+                    generations.append([Generation(text=res)])
+            return LLMResult(generations=generations)
 
 
 class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
@@ -700,30 +704,51 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
         additional_kwargs, final_function_schemas = self.preprocess_inputs(input_list)
 
         prompts, stop = await self.aprep_prompts(input_list, run_manager=run_manager)
-        chat_model: BaseChatModel = self.select_llm(prompts, input_list[0])
+        llm: BaseChatModel = self.select_llm(prompts, input_list[0])
+        callbacks = run_manager.get_child() if run_manager else None
 
         async def arun(additional_instruction: str = None):
+            # if final_function_schemas:
+            #     messages = [prompt.to_messages() for prompt in prompts]
+            #     if additional_instruction:
+            #         messages[0].append(AIMessage(content=additional_instruction))
+            #     return await llm.agenerate(
+            #         messages=messages,
+            #         stop=stop,
+            #         callbacks=run_manager.get_child() if run_manager else None,
+            #         functions=final_function_schemas,
+            #         **additional_kwargs,
+            #     )
+            # else:
             if final_function_schemas:
-                messages = [prompt.to_messages() for prompt in prompts]
-                if additional_instruction:
-                    messages[0].append(AIMessage(content=additional_instruction))
-                return await chat_model.agenerate(
-                    messages=messages,
-                    stop=stop,
-                    callbacks=run_manager.get_child() if run_manager else None,
-                    functions=final_function_schemas,
-                    **additional_kwargs,
-                )
-            else:
-                return await chat_model.agenerate_prompt(
-                    prompts,
-                    stop,
-                    callbacks=run_manager.get_child() if run_manager else None,
-                )
+                additional_kwargs["functions"] = final_function_schemas
+            if not isinstance(prompts, ChatPromptValue):
+
+                if isinstance(llm, BaseLanguageModel):
+                    return await llm.agenerate_prompt(
+                        prompts,
+                        stop,
+                        callbacks=callbacks,
+                        **additional_kwargs,
+                    )
+
+                else:
+                    results = await llm.bind(stop=stop, **additional_kwargs).abatch(
+                        cast(List, prompts), {"callbacks": callbacks}
+                    )
+                    generations: List[List[Generation]] = []
+                    for res in results:
+                        if isinstance(res, BaseMessage):
+                            generations.append([ChatGeneration(message=res)])
+                        else:
+                            generations.append([Generation(text=res)])
+                    return LLMResult(generations=generations)
 
         try:
             return await arun(additional_instruction=self._additional_instruction)
         except RequestRetry as e:
+            if not isinstance(prompts, ChatPromptValue):
+                raise  # supported only for chat
             if not self._is_retry == True:
                 self._is_retry = True
                 return await arun(self._additional_instruction)

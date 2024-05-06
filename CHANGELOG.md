@@ -118,3 +118,7 @@ New parameters in llm decorator
 
 ## Version 0.5.8 (2024-04-18)
 - hotfix, unbound variable error
+
+## Version 0.6.0 (2024-05-07)
+- support for Runnables as llms, that allows use of `llm.with_fallback` syntax when defining llms
+- support for passing llm directly as kwarg to prompt
