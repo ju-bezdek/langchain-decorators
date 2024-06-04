@@ -10,7 +10,7 @@ import yaml
 from enum import Enum
 from typing import Any, Coroutine, Dict, List, Type, Union, Optional, Tuple, get_args, get_origin, TYPE_CHECKING
 from langchain.llms.base import BaseLanguageModel
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI.
 from langchain.schema import BaseMessage
 from langchain.prompts.chat import ChatMessagePromptTemplate
 from .schema import OutputWithFunctionCall
