@@ -411,7 +411,7 @@ def make_llm_streamable(llm:BaseLanguageModel):
         else:
             lc_kwargs = {
                 k: getattr(llm, k, v)
-                for k, v in llm._lc_kwargs.items()
+                for k, v in llm.lc_attributes.items()
                 if not (llm.__exclude_fields__ or {}).get(k, False)  # type: ignore
             }
         lc_kwargs["streaming"] = True

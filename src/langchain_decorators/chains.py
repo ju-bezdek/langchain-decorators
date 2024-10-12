@@ -475,31 +475,31 @@ class LLMDecoratorChain(LLMChain):
     ) -> LLMResult:
         """Generate LLM result from inputs."""
         prompts, stop = self.prep_prompts(input_list, run_manager=run_manager)
-
         llm = self.select_llm(prompts, input_list[0])
-
+        callbacks = run_manager.get_child() if run_manager else None
         additional_kwargs = self.llm_kwargs or {}
         if self.__should_use_json_response_format(llm):
             additional_kwargs["response_format"] = {"type": "json_object"}
 
-        try:
+        if isinstance(llm, BaseLanguageModel):
             return llm.generate_prompt(
                 prompts,
                 stop,
-                callbacks=run_manager.get_child() if run_manager else None,
+                callbacks=callbacks,
                 **additional_kwargs,
             )
-        except RequestRetry as e:
-            if not self._is_retry == True:
-                self._is_retry = True
-                return llm.generate_prompt(
-                    prompts,
-                    stop,
-                    callbacks=run_manager.get_child() if run_manager else None,
-                    **additional_kwargs,
-                )
-            else:
-                raise Exception(e.feedback)
+
+        else:
+            results = llm.bind(stop=stop, **additional_kwargs).batch(
+                cast(List, prompts), {"callbacks": callbacks}
+            )
+            generations: List[List[Generation]] = []
+            for res in results:
+                if isinstance(res, BaseMessage):
+                    generations.append([ChatGeneration(message=res)])
+                else:
+                    generations.append([Generation(text=res)])
+            return LLMResult(generations=generations)
 
     async def agenerate(
         self,
@@ -665,33 +665,42 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
         additional_kwargs, final_function_schemas = self.preprocess_inputs(input_list)
 
         prompts, stop = self.prep_prompts(input_list, run_manager=run_manager)
-        chat_model: BaseChatModel = self.select_llm(prompts, input_list[0])
+        llm: BaseChatModel = self.select_llm(prompts, input_list[0])
+        callbacks = run_manager.get_child() if run_manager else None
 
-        def run():
-            if self.functions:
-                messages = [prompt.to_messages() for prompt in prompts]
+        def run(additional_instruction: str = None):
+            if final_function_schemas:
+                additional_kwargs["functions"] = final_function_schemas
+            if not isinstance(prompts, ChatPromptValue):
 
-                result = chat_model.generate(
-                    messages=messages,
-                    stop=stop,
-                    callbacks=run_manager.get_child() if run_manager else None,
-                    functions=final_function_schemas,
-                    **additional_kwargs,
-                )
-                return result
-            else:
-                return chat_model.generate_prompt(
-                    prompts,
-                    stop,
-                    callbacks=run_manager.get_child() if run_manager else None,
-                )
+                if isinstance(llm, BaseLanguageModel):
+                    return llm.generate_prompt(
+                        prompts,
+                        stop,
+                        callbacks=callbacks,
+                        **additional_kwargs,
+                    )
+
+                else:
+                    results = llm.bind(stop=stop, **additional_kwargs).batch(
+                        cast(List, prompts), {"callbacks": callbacks}
+                    )
+                    generations: List[List[Generation]] = []
+                    for res in results:
+                        if isinstance(res, BaseMessage):
+                            generations.append([ChatGeneration(message=res)])
+                        else:
+                            generations.append([Generation(text=res)])
+                    return LLMResult(generations=generations)
 
         try:
-            return run()
+            return run(additional_instruction=self._additional_instruction)
         except RequestRetry as e:
+            if not isinstance(prompts, ChatPromptValue):
+                raise  # supported only for chat
             if not self._is_retry == True:
                 self._is_retry = True
-                return run()
+                return run(self._additional_instruction)
             else:
                 raise Exception(e.feedback)
 
@@ -708,18 +717,6 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
         callbacks = run_manager.get_child() if run_manager else None
 
         async def arun(additional_instruction: str = None):
-            # if final_function_schemas:
-            #     messages = [prompt.to_messages() for prompt in prompts]
-            #     if additional_instruction:
-            #         messages[0].append(AIMessage(content=additional_instruction))
-            #     return await llm.agenerate(
-            #         messages=messages,
-            #         stop=stop,
-            #         callbacks=run_manager.get_child() if run_manager else None,
-            #         functions=final_function_schemas,
-            #         **additional_kwargs,
-            #     )
-            # else:
             if final_function_schemas:
                 additional_kwargs["functions"] = final_function_schemas
             if not isinstance(prompts, ChatPromptValue):

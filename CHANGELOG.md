@@ -122,3 +122,6 @@ New parameters in llm decorator
 ## Version 0.6.0 (2024-05-07)
 - support for Runnables as llms, that allows use of `llm.with_fallback` syntax when defining llms
 - support for passing llm directly as kwarg to prompt
+
+## Version 0.6.1 (2024-10-10)
+- fix llm.with_fallback (runable) for sync promp
