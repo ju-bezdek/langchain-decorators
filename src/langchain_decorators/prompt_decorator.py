@@ -12,7 +12,7 @@ from langchain.tools.base import BaseTool
 from .chains import (
     LLMDecoratorChain,
     LLMDecoratorChainWithFunctionSupport,
-    RequestRetry,
+    RequestRetryWithFeedback,
 )
 from .common import *
 from .function_decorator import get_dynamic_function_template_args, is_dynamic_llm_func

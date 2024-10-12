@@ -1,8 +1,11 @@
 import inspect
 import json
 import logging
+from functools import wraps
+from time import time
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Union, cast
 
+import httpx
 import pydantic
 from langchain.callbacks.base import BaseCallbackHandler, BaseCallbackManager
 from langchain.callbacks.manager import (
@@ -224,7 +227,7 @@ class LLMDecoratorChain(LLMChain):
         )
         try:
             result = super().__call__(**kwargs)
-        except RequestRetry as e:
+        except RequestRetryWithFeedback as e:
             if self._is_retry == True:
                 raise Exception(e.feedback)
             self._is_retry = True
@@ -270,7 +273,7 @@ class LLMDecoratorChain(LLMChain):
 
         try:
             result = await super().acall(**kwargs)
-        except RequestRetry as e:
+        except RequestRetryWithFeedback as e:
             if self._is_retry == True:
                 raise Exception(e.feedback)
             self._is_retry = True
@@ -334,7 +337,7 @@ class LLMDecoratorChain(LLMChain):
             result = result_data[self.output_key]
 
             result = self.postprocess_outputs(result_data, result)
-        except RequestRetry as e:
+        except RequestRetryWithFeedback as e:
             if self._is_retry == True:
                 raise Exception(e.feedback)
             self._is_retry = True
@@ -695,7 +698,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
 
         try:
             return run(additional_instruction=self._additional_instruction)
-        except RequestRetry as e:
+        except RequestRetryWithFeedback as e:
             if not isinstance(prompts, ChatPromptValue):
                 raise  # supported only for chat
             if not self._is_retry == True:
@@ -743,7 +746,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
 
         try:
             return await arun(additional_instruction=self._additional_instruction)
-        except RequestRetry as e:
+        except RequestRetryWithFeedback as e:
             if not isinstance(prompts, ChatPromptValue):
                 raise  # supported only for chat
             if not self._is_retry == True:
@@ -769,7 +772,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
             if function_call:
                 if isinstance(function_call["arguments"], str):
                     if function_call["name"] not in self.functions.func_name_map:
-                        raise RequestRetry(
+                        raise RequestRetryWithFeedback(
                             feedback=f"invalid function '{function_call['name']}', make sure to use only one of these functions: '{', '.join(self.functions.func_name_map.keys())}'"
                         )
                     try:
@@ -777,7 +780,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
                             function_call["arguments"]
                         )
                     except json.JSONDecodeError:
-                        raise RequestRetry(
+                        raise RequestRetryWithFeedback(
                             feedback="(function arguments  have to be a valid JSON)"
                         )
 
@@ -798,7 +801,7 @@ class LLMDecoratorChainWithFunctionSupport(LLMDecoratorChain):
                         log_level=logging.WARNING,
                     )
                     valid_func_names = ", ".join(self.functions.func_name_map.keys())
-                    raise RequestRetry(
+                    raise RequestRetryWithFeedback(
                         feedback=f"(I need to make sure to use only valid functions... from the list: {valid_func_names})"
                     )
                 res[self.function_output_key] = function
@@ -1043,8 +1046,17 @@ class FollowupHandle(BaseCallbackHandler):
         llm, kwargs = self._prepare_followup_chain_with_args(
             followup_content, with_functions=with_functions
         )
-
-        result = llm.generate_prompt(**kwargs)
+        try:
+            result = llm.generate_prompt(**kwargs)
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.ConnectTimeout) as e:
+            if self.chain.allow_retries:
+                if not self.chain._is_retry == True:
+                    self.chain._is_retry = True
+                    result = llm.generate_prompt(**kwargs)
+                else:
+                    raise
+            else:
+                raise
 
         return self._process_llm_output(result, with_functions, with_output_parser)
 
@@ -1057,11 +1069,21 @@ class FollowupHandle(BaseCallbackHandler):
         llm, kwargs = self._prepare_followup_chain_with_args(
             followup_content, with_functions=with_functions
         )
-        result = await llm.agenerate_prompt(**kwargs)
+        try:
+            result = await llm.agenerate_prompt(**kwargs)
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.ConnectTimeout) as e:
+            if self.chain.allow_retries:
+                if not self.chain._is_retry == True:
+                    self.chain._is_retry = True
+                    result = await llm.agenerate_prompt(**kwargs)
+                else:
+                    raise
+            else:
+                raise
         return self._process_llm_output(result, with_functions, with_output_parser)
 
 
-class RequestRetry(Exception):
+class RequestRetryWithFeedback(Exception):
 
     def __init__(self, feedback: str = None):
         super().__init__()

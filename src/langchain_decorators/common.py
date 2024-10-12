@@ -1,10 +1,12 @@
-
+import asyncio
+from functools import wraps
 import re
 import inspect
 import json
 import logging
 import os
 from textwrap import dedent
+import time
 from langchain.prompts import PromptTemplate
 import yaml
 from enum import Enum
@@ -27,7 +29,7 @@ if pydantic.__version__ <"2.0.0":
 else:
     from pydantic.v1 import BaseConfig, BaseModel, Extra, Field
     from pydantic.v1.fields import ModelField
-    
+
 if TYPE_CHECKING:
     from .prompt_template import BaseTemplateBuilder
 
@@ -49,7 +51,6 @@ class LlmSelector(BaseModel):
         """
         super().__init__(generation_min_tokens=generation_min_tokens, prompt_to_generation_ratio=prompt_to_generation_ratio)
 
-
     def with_llm(self, llm:BaseLanguageModel,  llm_selector_rule_key:str=None):
         """ this will automatically add a rule with token window based on the model name. Only works for OpenAI and Anthropic models."""
         max_tokens = self.get_model_window(llm.model_name)
@@ -57,7 +58,7 @@ class LlmSelector(BaseModel):
             self.with_llm_rule(llm, max_tokens, llm_selector_rule_key=llm_selector_rule_key)
         else:
             raise Exception(f"Could not find a token limit for model {llm.model_name}. Please use `with_llm_rule` and specify the max_tokens for your model.")
- 
+
         return self
 
     def with_llm_rule(self, llm:BaseLanguageModel, max_tokens:int, llm_selector_rule_key:str=None):
@@ -74,12 +75,11 @@ class LlmSelector(BaseModel):
         self.rules.insert(i, dict(max_tokens=max_tokens, llm_selector_rule_key=llm_selector_rule_key))
         self.llms[i]=llm    
         return self
-        
+
     def get_model_window(self, model_name:str)->int:
         for model_pattern, max_tokens in MODEL_LIMITS.items():
             if re.match(model_pattern, model_name):
                 return max_tokens
-        
 
     def get_llm(self, prompt:Union[str,List[BaseMessage]], function_schemas:List[dict]=None, expected_generated_tokens:int=None, streaming=False, llm_selector_rule_key:str=None)->BaseLanguageModel:
         """Picks the best LLM based on the rules and the prompt length.
@@ -92,7 +92,7 @@ class LlmSelector(BaseModel):
         """
         if not self.llms:
             raise Exception("No LLMs rules added to the LlmSelector")
-        
+
         result_index = None
         first_rule = self.rules[0]
         first_token_threshold = first_rule.get("max_tokens")
@@ -118,7 +118,7 @@ class LlmSelector(BaseModel):
                     if max_tokens and max_tokens > best_match_top_tokens:
                         best_match_top_tokens = max_tokens
                         best_match = i
-                
+
             # if no condition is met, return the last llm
             if llm_selector_rule_key and not key_match:
                 raise Exception(f"Could not find a LLM for key {llm_selector_rule_key}. Valid keys are: {set([rule.get('llm_selector_rule_key') for rule in self.rules])}")
@@ -131,27 +131,25 @@ class LlmSelector(BaseModel):
             return self.streamable_llms_cache[result_index]
         else:
             return self.llms[result_index]
-    
+
     def get_expected_total_tokens(self, prompt:Union[str,List[BaseMessage]], function_schemas:List[dict]=None, estimate:bool=True,expected_generated_tokens=None)->int:
         expected_generated_tokens = expected_generated_tokens or self.generation_min_tokens or 0
         prompt_tokens = self.get_token_count(prompt, function_schemas=function_schemas, estimate=estimate) 
         if expected_generated_tokens:
             return prompt_tokens + expected_generated_tokens
         else:
-             return prompt_tokens * (1+(self.prompt_to_generation_ratio or 0))
-        
-    
+            return prompt_tokens * (1+(self.prompt_to_generation_ratio or 0))
+
     def get_token_count(self, prompt:Union[str,List[BaseMessage]], function_schemas:List[dict]=None, estimate:bool=True)->int:
         """Get the number of tokens in the prompt. If estimate is True, it will use a fast estimation, otherwise it will use the llm to count the tokens (slower)"""
         if estimate:
             num_tokens = int(len(prompt)/2)
         else:
             num_tokens = count_tokens(prompt, llm=self.llms[0] ) # note: we will use the first llm to count the tokens... it should be the same general type, and if not, it's ok, should be close enough
-        
+
         if function_schemas:
             num_tokens += self.get_token_count(json.dumps(function_schemas), estimate=estimate)
         return num_tokens
-    
 
 
 class GlobalSettings(BaseModel):
@@ -193,14 +191,14 @@ class GlobalSettings(BaseModel):
                 .with_llm(default_llm, llm_selector_rule_key="chatGPT")\
                 .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview"  if USE_PREVIEW_MODELS else "gpt-3.5-turbo-16k",  request_timeout=60), llm_selector_rule_key="GPT4")\
                 #.with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106"), llm_selector_rule_key="chatGPT")\
-                #.with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-32k"), llm_selector_rule_key="GPT4") 
-        
+            # .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-32k"), llm_selector_rule_key="GPT4")
+
         else:
             if default_llm is None:
                 default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106" if USE_PREVIEW_MODELS else "gpt-3.5-turbo", request_timeout=60)  #  '-0613' - has function calling
             if default_streaming_llm is None:
                 default_streaming_llm = make_llm_streamable(default_llm)
-            
+
         if verbose is None:
             verbose = os.environ.get("LANGCHAIN_DECORATORS_VERBOSE", False) in [True,"true","True","1"]
         settings = cls(default_llm=default_llm, default_streaming_llm=default_streaming_llm,
@@ -220,8 +218,6 @@ class GlobalSettings(BaseModel):
     @classmethod
     def switch_settings(cls, project_name):
         GlobalSettings.settings_type = project_name
-
-
 
 
 class LogColors(Enum):
@@ -280,10 +276,9 @@ class PromptTypeSettings:
         self.capture_stream = capture_stream
         self.llm = llm
         self.llm_selector = llm_selector
-        
+
         self._prompt_template_builder = prompt_template_builder 
 
-    
     @property
     def prompt_template_builder(self):
         # lazy init due to circular imports
@@ -291,12 +286,9 @@ class PromptTypeSettings:
             from .prompt_template import OpenAITemplateBuilder
             self._prompt_template_builder= OpenAITemplateBuilder()
         return self._prompt_template_builder
-            
-
 
     def as_verbose(self):
         return PromptTypeSettings(llm=self.llm, color=self.color, log_level=100, capture_stream=self.capture_stream, llm_selector=self.llm_selector, prompt_template_builder=self.prompt_template_builder)
-
 
 
 class PromptTypes:
@@ -339,12 +331,12 @@ def get_func_return_type(func: callable, with_args:bool=False)->Union[Type, Tupl
                 else:
                     return_type = return_type_origin
         else:
-            
+
             if return_type and issubclass(return_type, Coroutine):
                 return None if not with_args else (None, None)
             else:
                 return_type = return_type
-    
+
     if return_type and is_union_type(return_type):
         return_type_args = getattr(return_type, '__args__', None)
         if return_type_args and len(return_type_args) == 2 and return_type_args[1] == type(None):
@@ -363,8 +355,8 @@ def get_func_return_type(func: callable, with_args:bool=False)->Union[Type, Tupl
                 return str
     else:
         return return_type if not with_args else (return_type, None)
-            
-            
+
+
 def get_function_docs(func: callable)->Tuple:
     if not func.__doc__:
         return None
@@ -375,12 +367,10 @@ def get_function_docs(func: callable)->Tuple:
         fist_line+="\n"
     docs = fist_line + dedent(rest)
     return docs
-    
 
-            
+
 def get_function_full_name(func: callable)->str:
     return  f"{func.__module__}.{func.__name__}" if not func.__module__=="__main__" else func.__name__
-    
 
 
 def get_arguments_as_pydantic_fields(func) -> Dict[str, ModelField]:
@@ -418,7 +408,7 @@ def make_llm_streamable(llm:BaseLanguageModel):
         return llm.__class__(**lc_kwargs)
     except Exception as e:
         logging.warning(f"Could not make llm {llm} streamable. Error: {e}")
-        
+
 
 def count_tokens(prompt: Union[str,List[BaseMessage]], llm:BaseLanguageModel) -> int:
     """Returns the number of tokens in a text string."""
