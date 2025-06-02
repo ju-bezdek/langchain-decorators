@@ -40,11 +40,16 @@ from .output_parsers import (
 from .prompt_template import PromptDecoratorTemplate
 from .schema import OutputWithFunctionCall
 
-if pydantic.__version__ < "2.0.0":
-    from pydantic import PrivateAttr, root_validator
+import pydantic
+if pydantic.__version__ <"2.0.0":
+    from pydantic import BaseModel, PrivateAttr
 else:
-    from pydantic.v1.class_validators import root_validator
-    from pydantic.v1.fields import PrivateAttr
+    from pydantic.v1 import BaseModel as BaseModelV1
+
+    if issubclass(AIMessage, BaseModelV1):
+        from pydantic.v1 import BaseModel, PrivateAttr
+    else:
+        from pydantic import BaseModel, PrivateAttr
 
 CachedChatLLM = None
 register_prompt_template = None
@@ -1021,7 +1026,10 @@ class FollowupHandle(BaseCallbackHandler):
         if with_output_parser:
             result = with_output_parser.parse(generation.text)
         else:
-            result = generation.text
+            if self.chain.prompt.output_parser:
+                result = self.chain.prompt.output_parser.parse(generation.text)
+            else:
+                result = generation.text
         if isinstance(generation, ChatGeneration):
             if with_functions:
                 results_data = self.chain.create_outputs(llm_result)
@@ -1046,17 +1054,21 @@ class FollowupHandle(BaseCallbackHandler):
         llm, kwargs = self._prepare_followup_chain_with_args(
             followup_content, with_functions=with_functions
         )
-        try:
+
+        if isinstance(llm, BaseLanguageModel):
             result = llm.generate_prompt(**kwargs)
-        except (httpx.TimeoutException, httpx.ConnectError, httpx.ConnectTimeout) as e:
-            if self.chain.allow_retries:
-                if not self.chain._is_retry == True:
-                    self.chain._is_retry = True
-                    result = llm.generate_prompt(**kwargs)
+        else:
+            run_result = llm.bind(stop=kwargs.pop("stop", None)).batch(
+                cast(List, kwargs["prompts"]),
+                {k: v for k, v in kwargs.items() if k not in ["stop", "prompts"]},
+            )
+            generations = []
+            for res in run_result:
+                if isinstance(res, BaseMessage):
+                    generations.append([ChatGeneration(message=res)])
                 else:
-                    raise
-            else:
-                raise
+                    generations.append([Generation(text=res)])
+            result = LLMResult(generations=generations)
 
         return self._process_llm_output(result, with_functions, with_output_parser)
 
@@ -1069,17 +1081,21 @@ class FollowupHandle(BaseCallbackHandler):
         llm, kwargs = self._prepare_followup_chain_with_args(
             followup_content, with_functions=with_functions
         )
-        try:
+        if isinstance(llm, BaseLanguageModel):
             result = await llm.agenerate_prompt(**kwargs)
-        except (httpx.TimeoutException, httpx.ConnectError, httpx.ConnectTimeout) as e:
-            if self.chain.allow_retries:
-                if not self.chain._is_retry == True:
-                    self.chain._is_retry = True
-                    result = await llm.agenerate_prompt(**kwargs)
+        else:
+            run_result = await llm.bind(stop=kwargs.pop("stop", None)).abatch(
+                cast(List, kwargs["prompts"]),
+                {k: v for k, v in kwargs.items() if k not in ["stop", "prompts"]},
+            )
+            generations = []
+            for res in run_result:
+                if isinstance(res, BaseMessage):
+                    generations.append([ChatGeneration(message=res)])
                 else:
-                    raise
-            else:
-                raise
+                    generations.append([Generation(text=res)])
+            result = LLMResult(generations=generations)
+
         return self._process_llm_output(result, with_functions, with_output_parser)
 
 

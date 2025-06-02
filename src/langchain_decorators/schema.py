@@ -9,8 +9,12 @@ import pydantic
 if pydantic.__version__ <"2.0.0":
     from pydantic import BaseModel, PrivateAttr
 else:
-    from pydantic.v1 import BaseModel, PrivateAttr
+    from pydantic.v1 import BaseModel as BaseModelV1
 
+    if issubclass(AIMessage, BaseModelV1):
+        from pydantic.v1 import BaseModel, PrivateAttr
+    else:
+        from pydantic import BaseModel, PrivateAttr
 
 
 T = TypeVar("T")
@@ -121,6 +125,3 @@ class OutputWithFunctionCall(Generic[T],BaseModel):
             function_output = repr(function_output)
 
         return FunctionMessage(name=self.function_name, content=function_output)
-
-
-

@@ -3,6 +3,7 @@ import re
 from enum import Enum
 from functools import wraps
 from string import Formatter
+from langchain_core.messages import BaseMessage
 from typing import (
     Any,
     Callable,
@@ -19,21 +20,13 @@ from typing import (
 import pydantic
 
 if pydantic.__version__ < "2.0.0":
-    from pydantic import BaseModel
-    from pydantic.schema import (
-        add_field_type_to_schema,
-        field_schema,
-        get_flat_models_from_fields,
-        get_model_name_map,
-    )
+    from pydantic import BaseModel, create_model
+
 else:
     from pydantic.v1 import BaseModel
-    from pydantic.v1.schema import (
-        field_schema,
-        get_flat_models_from_fields,
-        get_model_name_map,
-        add_field_type_to_schema,
-    )
+    if issubclass(BaseMessage, BaseModel):?
+        from pydantic.v1 import BaseModel, create_model
+    from pydantic.v1 import BaseModel, create_model
 
 from .common import (
     get_arguments_as_pydantic_fields,
@@ -55,7 +48,7 @@ def get_function_schema(func, schema_template_args=None):
         return func.get_function_schema(func, schema_template_args)
     else:
         raise ValueError(
-            f"Invalid item value in functions. Unable to retrieve schema from function {f}"
+            f"Invalid item value in functions. Unable to retrieve schema from function {func}"
         )
 
 

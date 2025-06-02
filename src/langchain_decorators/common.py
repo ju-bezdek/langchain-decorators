@@ -12,7 +12,7 @@ import yaml
 from enum import Enum
 from typing import Any, Coroutine, Dict, List, Type, Union, Optional, Tuple, get_args, get_origin, TYPE_CHECKING
 from langchain.llms.base import BaseLanguageModel
-from langchain.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.schema import BaseMessage
 from langchain.prompts.chat import ChatMessagePromptTemplate
 from .schema import OutputWithFunctionCall
@@ -29,6 +29,17 @@ if pydantic.__version__ <"2.0.0":
 else:
     from pydantic.v1 import BaseConfig, BaseModel, Extra, Field
     from pydantic.v1.fields import ModelField
+
+
+if pydantic.__version__ < "2.0.0":
+    from pydantic import BaseModel, PrivateAttr
+else:
+    from pydantic.v1 import BaseModel as BaseModelV1
+
+    if issubclass(BaseMessage, BaseModelV1):
+        from pydantic.v1 import BaseModel, Field
+    else:
+        from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from .prompt_template import BaseTemplateBuilder
@@ -138,7 +149,7 @@ class LlmSelector(BaseModel):
         if expected_generated_tokens:
             return prompt_tokens + expected_generated_tokens
         else:
-            return prompt_tokens * (1+(self.prompt_to_generation_ratio or 0))
+            return prompt_tokens * (1 + (self.prompt_to_generation_ratio or 0))
 
     def get_token_count(self, prompt:Union[str,List[BaseMessage]], function_schemas:List[dict]=None, estimate:bool=True)->int:
         """Get the number of tokens in the prompt. If estimate is True, it will use a fast estimation, otherwise it will use the llm to count the tokens (slower)"""
@@ -185,17 +196,35 @@ class GlobalSettings(BaseModel):
         """
         if llm_selector is None and default_llm is None and default_streaming_llm is None:
             # only use llm_selector if no default_llm and default_streaming_llm is defined, because than we dont know what rules to set up
-            default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106" if USE_PREVIEW_MODELS else "gpt-3.5-turbo", request_timeout=30) #  '-0613' - has function calling
+            default_llm = ChatOpenAI(
+                temperature=0.0,
+                model="gpt-4o-mini",
+                request_timeout=30,
+            )  #  '-0613' - has function calling
             default_streaming_llm = make_llm_streamable(default_llm)
-            llm_selector = LlmSelector()\
-                .with_llm(default_llm, llm_selector_rule_key="chatGPT")\
-                .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview"  if USE_PREVIEW_MODELS else "gpt-3.5-turbo-16k",  request_timeout=60), llm_selector_rule_key="GPT4")\
-                #.with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106"), llm_selector_rule_key="chatGPT")\
+            llm_selector = (
+                LlmSelector()
+                .with_llm(default_llm, llm_selector_rule_key="chatGPT")
+                .with_llm(
+                    ChatOpenAI(temperature=0.0, model="gpt-4", request_timeout=60),
+                    llm_selector_rule_key="GPT4",
+                )
+                .with_llm(
+                    ChatOpenAI(temperature=0.0, model="gpt-4o", request_timeout=60),
+                    llm_selector_rule_key="GPT4o",
+                )
+                .with_llm(
+                    ChatOpenAI(temperature=0.0, model="o1-preview", request_timeout=60),
+                    llm_selector_rule_key="o1",
+                )
+            )  # .with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106"), llm_selector_rule_key="chatGPT")\
             # .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-32k"), llm_selector_rule_key="GPT4")
 
         else:
             if default_llm is None:
-                default_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106" if USE_PREVIEW_MODELS else "gpt-3.5-turbo", request_timeout=60)  #  '-0613' - has function calling
+                default_llm = ChatOpenAI(
+                    temperature=0.0, model="gpt-4o-mini", request_timeout=60
+                )  #  '-0613' - has function calling
             if default_streaming_llm is None:
                 default_streaming_llm = make_llm_streamable(default_llm)
 
@@ -294,20 +323,31 @@ class PromptTypeSettings:
 class PromptTypes:
     UNDEFINED: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
-    
+
     BIG_CONTEXT: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-16k", request_timeout=60), 
-        color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
+        llm=ChatOpenAI(temperature=0.0, model="gpt-4o-mini", request_timeout=60),
+        color=LogColors.BLACK_AND_WHITE,
+        log_level=logging.DEBUG,
+    )
 
     GPT4: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview" if USE_PREVIEW_MODELS else "gpt-4", request_timeout=90), 
-        color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
-     
+        llm=ChatOpenAI(temperature=0.0, model="gpt-4", request_timeout=90),
+        color=LogColors.BLACK_AND_WHITE,
+        log_level=logging.DEBUG,
+    )
+
+    GPT4o: PromptTypeSettings = PromptTypeSettings(
+        llm=ChatOpenAI(temperature=0.0, model="gpt-4o", request_timeout=90),
+        color=LogColors.BLACK_AND_WHITE,
+        log_level=logging.DEBUG,
+    )
+
     BIG_CONTEXT_GPT4: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-4-1106-preview" if USE_PREVIEW_MODELS else "gpt-4", request_timeout=90), 
-        color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
-    
-    
+        llm=ChatOpenAI(temperature=0.0, model="gpt-4", request_timeout=90),
+        color=LogColors.BLACK_AND_WHITE,
+        log_level=logging.DEBUG,
+    )
+
     AGENT_REASONING: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.GREEN, log_level=logging.DEBUG)
     TOOL: PromptTypeSettings = PromptTypeSettings(
@@ -370,7 +410,11 @@ def get_function_docs(func: callable)->Tuple:
 
 
 def get_function_full_name(func: callable)->str:
-    return  f"{func.__module__}.{func.__name__}" if not func.__module__=="__main__" else func.__name__
+    return (
+        f"{func.__module__}.{func.__name__}"
+        if not func.__module__ == "__main__"
+        else func.__name__
+    )
 
 
 def get_arguments_as_pydantic_fields(func) -> Dict[str, ModelField]:
