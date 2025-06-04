@@ -2,23 +2,18 @@ import asyncio
 import inspect
 import logging
 from functools import wraps
-from types import coroutine
 from typing import Any, Callable, Dict, List, Optional, Union
-
+from langchain_core.runnables.base import RunnableLambda
 from langchain.llms.base import BaseLanguageModel
-from langchain.schema import BaseOutputParser
+from langchain.schema import BaseOutputParser, AIMessage
 from langchain.tools.base import BaseTool
-
-from .chains import (
-    LLMDecoratorChain,
-    LLMDecoratorChainWithFunctionSupport,
-    RequestRetryWithFeedback,
-)
+from langchain_core.runnables.config import RunnableConfig
+from .chains import LLMDecoratorChain, ToolsProvider
 from .common import *
 from .function_decorator import get_dynamic_function_template_args, is_dynamic_llm_func
 from .output_parsers import *
 from .prompt_template import PromptDecoratorTemplate
-from .schema import OutputWithFunctionCall
+from .schema import OutputWithFunctionCall, PydanticListTypeWrapper
 from .streaming_context import StreamingContext
 
 SPECIAL_KWARGS = [
@@ -257,29 +252,28 @@ def llm_prompt(
             if prompt_template.default_values:
                 kwargs = {**prompt_template.default_values, **kwargs}
 
-            if "output_parser" in kwargs:
-                callbacks = kwargs.pop("output_parser")
-
             if "callbacks" in kwargs:
                 callbacks = kwargs.pop("callbacks")
             else:
                 callbacks = []
 
-            if capture_stream:
-                callbacks.append(StreamingContext.StreamingContextCallback())
-
-            if "memory" in kwargs:
-                memory = kwargs.pop("memory")
+            if "config" in kwargs:
+                default_config = kwargs.pop("config")
             else:
-                if memory_source:
-                    if _self:
-                        memory = getattr(_self, memory_source)
-                    else:
-                        raise Exception(
-                            f"memory_source can only be used on bound functions (arg[0] is not set)"
-                        )
-                else:
-                    memory = None
+                default_config = RunnableConfig()
+
+            # if "memory" in kwargs:
+            #     memory = kwargs.pop("memory")
+            # else:
+            #     if memory_source:
+            #         if _self:
+            #             memory = getattr(_self, memory_source)
+            #         else:
+            #             raise Exception(
+            #                 f"memory_source can only be used on bound functions (arg[0] is not set)"
+            #             )
+            #     else:
+            #         memory = None
 
             if "functions" in kwargs:
                 functions = kwargs.pop("functions")
@@ -298,6 +292,14 @@ def llm_prompt(
                 else:
                     functions = None
 
+            if followup_handle:
+                if callbacks:
+                    callbacks.append(followup_handle)
+                else:
+                    callbacks = [followup_handle]
+
+            default_config.update({"callbacks": callbacks, "verbose": verbose})
+
             llm_kwargs = None
             if "llm_kwargs" in kwargs:
                 llm_kwargs = kwargs.pop("llm_kwargs")
@@ -308,7 +310,7 @@ def llm_prompt(
                 "llm": prompt_llm,
                 "name": name,
                 "prompt": prompt_template,
-                "memory": memory,
+                # "memory": memory,
                 "llm_selector": _llm_selector,
                 "llm_selector_rule_key": llm_selector_rule_key,
                 "capture_stream": capture_stream,
@@ -317,8 +319,18 @@ def llm_prompt(
                 "prompt_type": prompt_type or PromptTypes.UNDEFINED,
                 "allow_retries": retry_on_output_parsing_error,
                 "llm_kwargs": llm_kwargs or {},
+                "return_type": prompt_template.return_type,
+                "default_config": default_config,
+                "with_structured_output": (
+                    prompt_template.return_type
+                    if issubclass(
+                        prompt_template.return_type,
+                        (BaseModel, PydanticListTypeWrapper),
+                    )
+                    else None
+                ),
             }
-
+            function_call = None
             if functions is not None:
                 for llm_func in functions:
                     if is_dynamic_llm_func(llm_func):
@@ -336,26 +348,22 @@ def llm_prompt(
                         kwargs = validate_and_enrich_kwargs(
                             kwargs,
                             _self,
-                            memory,
                             required,
                             optional,
                             additional_variable_source,
                         )
-
-                llmChain = LLMDecoratorChainWithFunctionSupport(
-                    **chain_kwargs, functions=functions
+                if "function_call" in kwargs:
+                    function_call = kwargs.pop("function_call")
+                chain_kwargs["tools_provider"] = ToolsProvider(
+                    functions=functions,
                 )
+                chain_kwargs["return_type"] = OutputWithFunctionCall[
+                    prompt_template.return_type
+                ]
 
-            elif isinstance(
-                prompt_template.output_parser, OpenAIFunctionsPydanticOutputParser
-            ):
-                function = prompt_template.output_parser.build_llm_function()
-                kwargs["function_call"] = function
-                llmChain = LLMDecoratorChainWithFunctionSupport(
-                    **chain_kwargs, functions=[function]
-                )
-            else:
-                llmChain = LLMDecoratorChain(**chain_kwargs)
+            llmChain = LLMDecoratorChain(**chain_kwargs)
+            if followup_handle:
+                followup_handle.bind_to_chain(llmChain)
 
             reserved_inputs_violations = [
                 key for key in prompt_template.input_variables if key in control_kwargs
@@ -379,32 +387,23 @@ def llm_prompt(
                 )
 
             kwargs = validate_and_enrich_kwargs(
-                kwargs, _self, memory, prompt_template.input_variables
+                kwargs, _self, prompt_template.input_variables
             )
 
-            if followup_handle:
-                followup_handle.bind_to_chain(llmChain)
-                if callbacks:
-                    callbacks.append(followup_handle)
-                else:
-                    callbacks = [followup_handle]
-
-            if stop_tokens:
-                kwargs["stop"] = stop_tokens
             call_args = {
                 "inputs": kwargs,
-                "return_only_outputs": True,
-                "callbacks": callbacks,
             }
+            if stop_tokens:
+                call_args["stop"] = stop_tokens
+            if function_call:
+                call_args["function_call"] = function_call
 
             llmChain.default_call_kwargs = call_args
-
             return llmChain
 
         def validate_and_enrich_kwargs(
             kwargs,
             input_variables_source,
-            memory,
             required_args,
             optional_args=None,
             additional_input_variables_source=None,
@@ -419,8 +418,6 @@ def llm_prompt(
                 kwargs[format_instructions_parameter_key] = (
                     None  # init the format instructions with None... will be filled later
                 )
-            if memory and memory.memory_key in missing_inputs:
-                missing_inputs.remove(memory.memory_key)
 
             def get_value_ext(source, key: str, default):
                 # this doesnśt work since native python Formatter doesn't support "." in keys
@@ -499,7 +496,7 @@ def llm_prompt(
                     kwargs.update(_kwargs)
 
                 llmChain = build_chain(*args, **kwargs)
-                return llmChain.execute()
+                return llmChain.invoke(inputs={})
 
             wrapper.build_chain = build_chain
 
@@ -531,7 +528,7 @@ def llm_prompt(
 
                 llmChain = build_chain(*args, **kwargs)
 
-                return await llmChain.aexecute()
+                return await llmChain.ainvoke(inputs={})
 
             async_wrapper.build_chain = build_chain
             if inspect.signature(func).parameters.get("functions"):

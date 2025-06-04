@@ -1,4 +1,3 @@
-import asyncio
 from functools import wraps
 import re
 import inspect
@@ -6,38 +5,39 @@ import json
 import logging
 import os
 from textwrap import dedent
-import time
-from langchain.prompts import PromptTemplate
+import warnings
+
 import yaml
 from enum import Enum
 from typing import Any, Coroutine, Dict, List, Type, Union, Optional, Tuple, get_args, get_origin, TYPE_CHECKING
 from langchain.llms.base import BaseLanguageModel
-from langchain_openai import ChatOpenAI
+
 from langchain.schema import BaseMessage
 from langchain.prompts.chat import ChatMessagePromptTemplate
-from .schema import OutputWithFunctionCall
+
 from typing_inspect import is_generic_type, is_union_type
 
 import pydantic
 
-USE_PREVIEW_MODELS = os.environ.get("LANGCHAIN_DECORATORS_USE_PREVIEW_MODELS", True) in [True,"true","True","1"]
+try:
+    from langchain.chat_models import init_chat_model
+except ImportError:
 
+    def init_chat_model(model_name: str, **kwargs):
+        from langchain.chat_models import ChatOpenAI
 
-if pydantic.__version__ <"2.0.0":
-    from pydantic import BaseConfig, BaseModel, Extra, Field
-    from pydantic.fields import ModelField
-else:
-    from pydantic.v1 import BaseConfig, BaseModel, Extra, Field
-    from pydantic.v1.fields import ModelField
+        return ChatOpenAI(model_name=model_name, **kwargs)
 
 
 if pydantic.__version__ < "2.0.0":
-    from pydantic import BaseModel, PrivateAttr
-else:
-    from pydantic.v1 import BaseModel as BaseModelV1
+    from pydantic import BaseModel, Extra
 
-    if issubclass(BaseMessage, BaseModelV1):
+    USE_PYDANTIC_V1 = True
+else:
+    USE_PYDANTIC_V1 = os.environ.get("USE_PYDANTIC_V1", "").lower() in ("true", "1")
+    if USE_PYDANTIC_V1:
         from pydantic.v1 import BaseModel, Field
+        from pydantic.v1.fields import ModelField
     else:
         from pydantic import BaseModel, Field
 
@@ -170,63 +170,51 @@ class GlobalSettings(BaseModel):
     verbose: bool = False
     llm_selector: Optional[LlmSelector] = None
 
-    class Config:
-        allow_population_by_field_name = True
-        extra = Extra.allow
+    if pydantic.__version__ < "2.0.0":
+
+        class Config:
+            allow_population_by_field_name = True
+            extra = Extra.allow
+
+    else:
+        model_config = {
+            "populate_by_name": True,
+            "extra": "allow",
+        }
 
     @classmethod
-    def define_settings(cls,
-                        settings_type="default",
-                        default_llm:BaseLanguageModel=None,
-                        default_streaming_llm:BaseLanguageModel=None,
-                        logging_level=logging.INFO,
-                        verbose=None,
-                        llm_selector: Optional["LlmSelector"] = None,
-                        **kwargs
-                        ):
-        """ Define the global settings for the project.
-        
+    def define_settings(
+        cls,
+        settings_type="default",
+        default_llm: BaseLanguageModel = None,
+        logging_level=logging.INFO,
+        verbose=None,
+        llm_selector: Optional["LlmSelector"] = None,
+        **kwargs,
+    ):
+        """Define the global settings for the project.
+
         Args:
             settings_type (str, optional): The name of the settings. Defaults to "default".
             default_llm (BaseLanguageModel, optional): The default language model to use. Defaults to None.
-            default_streaming_llm (BaseLanguageModel, optional): The default streaming language model to use. Defaults to None.
             llm_selector (Optional[LlmSelector], optional): The language model selector to use. Defaults to None.
             logging_level (int, optional): The logging level to use. Defaults to logging.INFO.
 
         """
-        if llm_selector is None and default_llm is None and default_streaming_llm is None:
-            # only use llm_selector if no default_llm and default_streaming_llm is defined, because than we dont know what rules to set up
-            default_llm = ChatOpenAI(
-                temperature=0.0,
-                model="gpt-4o-mini",
-                request_timeout=30,
-            )  #  '-0613' - has function calling
-            default_streaming_llm = make_llm_streamable(default_llm)
+
+        # only use llm_selector if no default_llm and default_streaming_llm is defined, because than we dont know what rules to set up
+        default_llm = default_llm or init_chat_model("openai:gpt-4o-mini")
+        # backward compatibility
+        default_streaming_llm = kwargs.pop("default_streaming_llm", None) or default_llm
+        if not llm_selector:
             llm_selector = (
                 LlmSelector()
-                .with_llm(default_llm, llm_selector_rule_key="chatGPT")
+                .with_llm(default_llm, llm_selector_rule_key="gpt-4o-mini")
                 .with_llm(
-                    ChatOpenAI(temperature=0.0, model="gpt-4", request_timeout=60),
-                    llm_selector_rule_key="GPT4",
-                )
-                .with_llm(
-                    ChatOpenAI(temperature=0.0, model="gpt-4o", request_timeout=60),
+                    init_chat_model("openai:gpt-4o"),
                     llm_selector_rule_key="GPT4o",
                 )
-                .with_llm(
-                    ChatOpenAI(temperature=0.0, model="o1-preview", request_timeout=60),
-                    llm_selector_rule_key="o1",
-                )
-            )  # .with_llm(ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-1106"), llm_selector_rule_key="chatGPT")\
-            # .with_llm(ChatOpenAI(temperature=0.0, model="gpt-4-32k"), llm_selector_rule_key="GPT4")
-
-        else:
-            if default_llm is None:
-                default_llm = ChatOpenAI(
-                    temperature=0.0, model="gpt-4o-mini", request_timeout=60
-                )  #  '-0613' - has function calling
-            if default_streaming_llm is None:
-                default_streaming_llm = make_llm_streamable(default_llm)
+            )
 
         if verbose is None:
             verbose = os.environ.get("LANGCHAIN_DECORATORS_VERBOSE", False) in [True,"true","True","1"]
@@ -291,13 +279,18 @@ def print_log(log_object: Any, log_level: int, color: LogColors = None):
 
 
 class PromptTypeSettings:
-    def __init__(self, 
-                 llm: BaseLanguageModel = None,  
-                 color: LogColors = None, 
-                 log_level: Union[int, str] = "info", 
-                 capture_stream: bool = False, 
-                 llm_selector: "LlmSelector" = None, 
-                 prompt_template_builder: "BaseTemplateBuilder" = None):
+
+    def __init__(
+        self,
+        llm: BaseLanguageModel = None,
+        color: LogColors = None,
+        log_level: Union[int, str] = "info",
+        capture_stream: bool = False,
+        llm_selector: "LlmSelector" = None,
+        prompt_template_builder: "BaseTemplateBuilder" = None,
+        supports_structured_output=None,
+    ):
+
         self.color = color or LogColors.DARK_GRAY
         if isinstance(log_level, str):
             log_level = getattr(logging, log_level.upper())
@@ -305,6 +298,8 @@ class PromptTypeSettings:
         self.capture_stream = capture_stream
         self.llm = llm
         self.llm_selector = llm_selector
+
+        self.supports_structured_output = supports_structured_output or True
 
         self._prompt_template_builder = prompt_template_builder 
 
@@ -324,77 +319,130 @@ class PromptTypes:
     UNDEFINED: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.BLACK_AND_WHITE, log_level=logging.DEBUG)
 
+    # Backward compatibility
+    # You can override the LLM in the prompt type settings
     BIG_CONTEXT: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-4o-mini", request_timeout=60),
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
     )
 
     GPT4: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-4", request_timeout=90),
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
     )
 
     GPT4o: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-4o", request_timeout=90),
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
     )
 
     BIG_CONTEXT_GPT4: PromptTypeSettings = PromptTypeSettings(
-        llm=ChatOpenAI(temperature=0.0, model="gpt-4", request_timeout=90),
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
     )
 
     AGENT_REASONING: PromptTypeSettings = PromptTypeSettings(
-        color=LogColors.GREEN, log_level=logging.DEBUG)
+        color=LogColors.GREEN, log_level=logging.WARNING
+    )
     TOOL: PromptTypeSettings = PromptTypeSettings(
-        color=LogColors.BLUE, log_level=logging.DEBUG)
+        color=LogColors.BLUE, log_level=logging.WARNING
+    )
     FINAL_OUTPUT: PromptTypeSettings = PromptTypeSettings(
-        color=LogColors.YELLOW, log_level=logging.DEBUG)
+        color=LogColors.YELLOW, log_level=logging.WARNING
+    )
 
 
-def get_func_return_type(func: callable, with_args:bool=False)->Union[Type, Tuple[Type, List[Type]]]:
-    return_type = func.__annotations__.get("return",None)
-    if inspect.iscoroutinefunction(func):
-        if return_type:
-            if is_generic_type(return_type):
-                return_type_origin = get_origin(return_type)
-                if return_type_origin and issubclass(return_type_origin, Coroutine):
-                    return_type_args = getattr(return_type, '__args__', None)
-                    if return_type_args and len(return_type_args) == 3:
-                        return_type = return_type_args[2]
-                    else:
-                        raise Exception(f"Invalid Coroutine annotation {return_type}. Expected Coroutine[ any , any, <return_type>] or just <return_type>")
-                else:
-                    return_type = return_type_origin
+def get_type_from_annotation(
+    annotation: Type, with_args: bool = False
+) -> Union[Type, Tuple[Type, List[Type]]]:
+    """
+    Extract and process a type annotation, handling Union, generic, and special types.
+
+    Args:
+        annotation: The type annotation to process
+        with_args: If True, return tuple of (type, args), otherwise just the type
+
+    Returns:
+        Processed type or tuple of (type, args) if with_args=True
+    """
+    # Handle None annotation early
+    if annotation is None:
+        return None if not with_args else (None, None)
+
+    # Handle Union types (primarily Optional[T] which is Union[T, None])
+    if is_union_type(annotation):
+        annotation_args = getattr(annotation, "__args__", None)
+        if (
+            annotation_args
+            and len(annotation_args) == 2
+            and annotation_args[1] == type(None)
+        ):
+            # This is Optional[T] or Union[T, None] - extract the non-None type
+            actual_type = annotation_args[0]
+            return (
+                actual_type if not with_args else (actual_type, list(annotation_args))
+            )
         else:
+            raise Exception(
+                f"Invalid Union annotation {annotation}. Expected Union[<type>, None] or just <type>"
+            )
 
-            if return_type and issubclass(return_type, Coroutine):
-                return None if not with_args else (None, None)
-            else:
-                return_type = return_type
+    # Handle generic types (List[T], Dict[K,V], OutputWithFunctionCall[T], etc.)
+    elif is_generic_type(annotation):
+        from .schema import OutputWithFunctionCall
 
-    if return_type and is_union_type(return_type):
-        return_type_args = getattr(return_type, '__args__', None)
-        if return_type_args and len(return_type_args) == 2 and return_type_args[1] == type(None):
-            return return_type_args[0] if not with_args else (return_type_args[0], return_type_args)
-        else:
-            raise Exception(f"Invalid Union annotation {return_type}. Expected Union[ <return_type>, None] or just <return_type>")
-    elif is_generic_type(return_type):
-        # this should cover list and dict
-        if get_origin(return_type) !=OutputWithFunctionCall and return_type!=OutputWithFunctionCall:
-            return get_origin(return_type) if not with_args else (get_origin(return_type), get_args(return_type))
-        else:
-            args = get_args(return_type)
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+
+        # Special handling for OutputWithFunctionCall
+        if origin == OutputWithFunctionCall or annotation == OutputWithFunctionCall:
             if args:
-                return args[0]
+                return args[0] if not with_args else (args[0], list(args))
             else:
-                return str
+                return str if not with_args else (str, None)
+        else:
+            # Handle List[T], Dict[K,V], etc. - return the container type and its args
+            return origin if not with_args else (origin, list(args))
+
+    # Handle simple types (str, int, MyClass, etc.)
     else:
-        return return_type if not with_args else (return_type, None)
+        return annotation if not with_args else (annotation, None)
+
+
+def get_func_return_type(
+    func: callable, with_args: bool = False
+) -> Union[Type, Tuple[Type, List[Type]]]:
+    """
+    Get the return type annotation from a function, with special handling for async functions.
+
+    Args:
+        func: The function to analyze
+        with_args: If True, return tuple of (type, args), otherwise just the type
+
+    Returns:
+        Processed return type or tuple of (type, args) if with_args=True
+    """
+    return_type = func.__annotations__.get("return", None)
+
+    # Handle None return type early
+    if return_type is None:
+        return None if not with_args else (None, None)
+
+    # Handle async functions - extract the actual return type from Coroutine[Any, Any, ReturnType]
+    if inspect.iscoroutinefunction(func) and is_generic_type(return_type):
+        return_type_origin = get_origin(return_type)
+        if return_type_origin and issubclass(return_type_origin, Coroutine):
+            return_type_args = getattr(return_type, "__args__", None)
+            if return_type_args and len(return_type_args) == 3:
+                # Extract the actual return type from Coroutine[Any, Any, ReturnType]
+                return_type = return_type_args[2]
+            else:
+                raise Exception(
+                    f"Invalid Coroutine annotation {return_type}. Expected Coroutine[any, any, <return_type>]"
+                )
+
+    # Process the (potentially unwrapped) return type using the general function
+    return get_type_from_annotation(return_type, with_args)
 
 
 def get_function_docs(func: callable)->Tuple:
@@ -415,26 +463,6 @@ def get_function_full_name(func: callable)->str:
         if not func.__module__ == "__main__"
         else func.__name__
     )
-
-
-def get_arguments_as_pydantic_fields(func) -> Dict[str, ModelField]:
-    argument_types = {}
-    model_config = BaseConfig()
-    for arg_name, arg_desc in inspect.signature(func).parameters.items():
-        if arg_name != "self" and not (arg_name.startswith("_") and arg_desc.default!=inspect.Parameter.empty):
-            default = arg_desc.default if arg_desc.default!=inspect.Parameter.empty else None
-            if arg_desc.annotation==inspect._empty:
-                raise Exception(f"Argument '{arg_name}' of function {func.__name__} has no type annotation")
-            argument_types[arg_name] = ModelField(
-                class_validators=None,
-                model_config=model_config,
-                name=arg_name, 
-                type_=arg_desc.annotation,
-                default=default,
-                required= arg_desc.default==inspect.Parameter.empty
-                )
-            
-    return argument_types
 
 
 def make_llm_streamable(llm:BaseLanguageModel):
@@ -460,6 +488,45 @@ def count_tokens(prompt: Union[str,List[BaseMessage]], llm:BaseLanguageModel) ->
         return llm.get_num_tokens(prompt)
     elif isinstance(prompt,list):
         return llm.get_num_tokens_from_messages(prompt)
+
+
+def deprecated(reason: str = None):
+    """
+    Decorator to mark functions as deprecated.
+
+    Args:
+        reason: Explanation why the function is deprecated and what to use instead.
+
+    Examples:
+        ```python
+        @deprecated("Use new_function() instead")
+        def old_function():
+            pass
+        ```
+    """
+
+    def decorator(func):
+        message = f"Function {func.__name__} is deprecated."
+        if reason:
+            message += f" {reason}"
+
+        if inspect.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def wrapper(*args, **kwargs):
+                warnings.warn(message, DeprecationWarning, stacklevel=2)
+                return await func(*args, **kwargs)
+
+        else:
+
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                warnings.warn(message, DeprecationWarning, stacklevel=2)
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 MODEL_LIMITS={

@@ -1,49 +1,73 @@
+import inspect
+from typing import Dict, Tuple, Type, get_origin
+import os
 
-from typing import Type, get_origin
-
-
-
+from .common import get_type_from_annotation
 import pydantic
 if pydantic.__version__ <"2.0.0":
     from pydantic import BaseModel, ValidationError
-    from pydantic.fields import ModelField
+    from pydantic.fields import FieldInfo
+
+    USE_PYDANTIC_V1 = True
 else:
-    from pydantic.v1 import BaseModel, ValidationError
-    from pydantic.v1.fields import ModelField
-
-
-
-def get_field_type(field_info: ModelField):
-    _item_type=None
-                
-    if field_info.type_==field_info.outer_type_:
-        _type=field_info.type_
-    elif list == getattr(field_info.outer_type_, '__origin__', None):
-        #is list
-        _type = list
-        
-    elif dict == getattr(field_info.outer_type_, '__origin__', None):
-        _type=dict
+    USE_PYDANTIC_V1 = os.environ.get("USE_PYDANTIC_V1", "").lower() in ("true", "1")
+    if USE_PYDANTIC_V1:
+        from pydantic.v1 import BaseModel, ValidationError, BaseConfig
+        from pydantic.v1.fields import FieldInfo
     else:
-        raise Exception(f"Unknown type: {field_info.annotation}")
-   
-    return _type
+        from pydantic import BaseModel, ValidationError
+        from pydantic import ConfigDict as BaseConfig
+        from pydantic.fields import FieldInfo as FieldInfo
 
 
+def get_field_type(field_info: FieldInfo):
+    if field_info.annotation:
+        # In Pydantic v2, use annotation
+        _type = get_type_from_annotation(field_info.annotation)
+        return _type
 
-def is_field_nullable(field_info: ModelField):
-    _nullable=field_info.allow_none
-    
+    return str
 
-def get_field_item_type(field_info: ModelField):
-    
-    if list == getattr(field_info.outer_type_, '__origin__', None):
-        return field_info.outer_type_.__args__[0]
-    
+
+def is_field_nullable(field_info: FieldInfo):
+    # In Pydantic v2, check the annotation for Optional/Union with None
+    if hasattr(field_info, "annotation"):
+        from typing import Union
+        import types
+
+        annotation = field_info.annotation
+        origin = get_origin(annotation)
+
+        # Check if it's Union type (which Optional uses)
+        if origin is Union:
+            args = getattr(annotation, "__args__", ())
+            return type(None) in args
+
+        # Check if it's explicitly None
+        if annotation is type(None):
+            return True
+
+    # Fallback: check if default is None
+    return getattr(field_info, "default", ...) is None
+
+
+def get_field_item_type(field_info: FieldInfo):
+    if field_info.annotation:
+        # In Pydantic v2, use annotation
+        _type, _args = get_type_from_annotation(field_info.annotation, True)
+        return _args[0]
+
+    return str
+
+
 def align_fields_with_model( data:dict, model:Type[BaseModel]) -> dict:
     res = {}
     data_with_compressed_keys=None
-    for field,field_info in model.__fields__.items():
+    if USE_PYDANTIC_V1:
+        field_items = model.__fields__.items()
+    else:
+        field_items = model.model_fields.items()
+    for field, field_info in field_items:
         value=None
         if field in data:
             value=data[field]
@@ -63,7 +87,7 @@ def align_fields_with_model( data:dict, model:Type[BaseModel]) -> dict:
             compressed_key = field.lower().replace(" ","").replace("_","")
             if compressed_key in data_with_compressed_keys:
                 value=data_with_compressed_keys[compressed_key]
-        
+
         if isinstance(value, dict):
             field_type = get_origin(field_info.type_) if field_info.type_ else None
             if field_info.type_ and isinstance(field_type,type) and issubclass(field_type, BaseModel):
@@ -72,10 +96,15 @@ def align_fields_with_model( data:dict, model:Type[BaseModel]) -> dict:
             value = [align_fields_with_model(item, field_info.type_) for item in value]
         res[field]=value
     return res
-    
 
-def humanize_pydantic_validation_error(validation_error:ValidationError):
-     return "\n".join([ f'{".".join([str(i) for i in err.get("loc")])} - {err.get("msg")} ' for err in  validation_error.errors()])
+
+def humanize_pydantic_validation_error(validation_error: "ValidationError"):
+    return "\n".join(
+        [
+            f'{".".join([str(i) for i in err.get("loc")])} - {err.get("msg")} '
+            for err in validation_error.errors()
+        ]
+    )
 
 
 def sanitize_pydantic_schema(schema:dict):
@@ -108,3 +137,33 @@ def sanitize_pydantic_schema(schema:dict):
 
         replace_refs_recursive(schema)
     return schema
+
+
+def get_arguments_as_pydantic_fields(func) -> Dict[str, Tuple[Type, pydantic.Field]]:
+    argument_types = {}
+
+    for arg_name, arg_desc in inspect.signature(func).parameters.items():
+        if arg_name != "self" and not (
+            arg_name.startswith("_") and arg_desc.default != inspect.Parameter.empty
+        ):
+            default = (
+                arg_desc.default
+                if arg_desc.default != inspect.Parameter.empty
+                else None
+            )
+            if arg_desc.annotation == inspect._empty:
+                raise Exception(
+                    f"Argument '{arg_name}' of function {func.__name__} has no type annotation"
+                )
+            model_kwargs = {}
+            if arg_desc.default == inspect.Parameter.empty:
+                model_kwargs["required"] = True
+            else:
+                model_kwargs["default"] = default
+
+            argument_types[arg_name] = (
+                arg_desc.annotation,
+                pydantic.Field(name=arg_name, **model_kwargs),
+            )
+
+    return argument_types

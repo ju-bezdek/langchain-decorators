@@ -4,6 +4,6 @@ from .prompt_decorator import PromptDecoratorTemplate
 from .streaming_context import StreamingContext
 from .prompt_decorator import llm_prompt
 from .function_decorator import llm_function, get_function_schema
-from .chains import FunctionsProvider, FollowupHandle
+from .chains import ToolsProvider, FollowupHandle
 
-__version__ = "0.6.1"
+__version__ = "1.0.0"
