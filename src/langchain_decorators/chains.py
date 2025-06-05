@@ -35,7 +35,11 @@ from langchain.schema import (
 )
 from langchain.schema.output import LLMResult
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.runnables.base import RunnableLambda, RunnableSequence
+from langchain_core.runnables import (
+    RunnableLambda,
+    RunnableSequence,
+    RunnableWithFallbacks,
+)
 from .pydantic_helpers import USE_PYDANTIC_V1
 
 from .common import LlmSelector, LogColors, PromptTypes, PromptTypeSettings, print_log
@@ -193,7 +197,7 @@ class LLMDecoratorChain(Runnable):
         func: Callable[[Union[BaseLanguageModel, BaseChatModel]], Runnable],
     ) -> Runnable:
         """Find and apply a function on the LLM in the chain."""
-        if isinstance(runnable, BaseLanguageModel):
+        if isinstance(runnable, (BaseLanguageModel, RunnableWithFallbacks)):
             return func(runnable)
         elif isinstance(runnable, RunnableSequence):
             if isinstance(runnable.steps[0], BaseLanguageModel):
@@ -320,7 +324,6 @@ class LLMDecoratorChain(Runnable):
                 ),
             )
 
-            raise ValueError("ToolsProvider can only be used with BaseChatModel. ")
         return llm
 
     def select_llm(self, prompt, inputs=None):

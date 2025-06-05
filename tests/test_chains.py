@@ -15,9 +15,13 @@ from langchain_decorators import (
     ToolsProvider
 )
 
+# Test with and without fallbacks
+WITH_FALLBACKS = pytest.param(True, id="with_fallbacks"), pytest.param(
+    False, id="without_fallbacks"
+)
 
-@pytest.fixture(scope="session")
-def setup_real_llm():
+
+def configure_llm(with_fallbacks: bool) -> BaseChatModel:
     """Setup real LLM for testing"""
     from langchain_openai import ChatOpenAI
 
@@ -29,8 +33,20 @@ def setup_real_llm():
         temperature=0.0, model_name="gpt-3.5-turbo"  # Deterministic for testing
     )
 
+    # Use the parameterized value to determine if fallbacks should be used
+
+    if with_fallbacks:
+        real_llm = real_llm.with_fallbacks([ChatOpenAI(model_name="gpt-4o-mini")])
+
     GlobalSettings.define_settings(default_llm=real_llm, verbose=False)
     return real_llm
+
+
+@pytest.fixture(
+    scope="session", params=[True, False], ids=["with_fallbacks", "without_fallbacks"]
+)
+def setup_real_llm(request):
+    configure_llm(request.param)
 
 
 @pytest.mark.real_llm
@@ -472,4 +488,5 @@ class TestChains:
 
 
 if __name__ == "__main__":
-    TestChains().test_tools_provider_functionality(None)
+    configure_llm(True)
+    TestChains().test_followup_with_functions_sync(None)

@@ -11,7 +11,7 @@ import yaml
 from enum import Enum
 from typing import Any, Coroutine, Dict, List, Type, Union, Optional, Tuple, get_args, get_origin, TYPE_CHECKING
 from langchain.llms.base import BaseLanguageModel
-
+from langchain_core.runnables import RunnableWithFallbacks
 from langchain.schema import BaseMessage
 from langchain.prompts.chat import ChatMessagePromptTemplate
 
@@ -164,8 +164,7 @@ class LlmSelector(BaseModel):
 
 
 class GlobalSettings(BaseModel):
-    default_llm: Optional[BaseLanguageModel] = None
-    default_streaming_llm: Optional[BaseLanguageModel] = None
+    default_llm: Union[BaseLanguageModel, RunnableWithFallbacks, None] = None
     logging_level: int = logging.INFO
     verbose: bool = False
     llm_selector: Optional[LlmSelector] = None
@@ -186,7 +185,7 @@ class GlobalSettings(BaseModel):
     def define_settings(
         cls,
         settings_type="default",
-        default_llm: BaseLanguageModel = None,
+        default_llm: Union[BaseLanguageModel, RunnableWithFallbacks] = None,
         logging_level=logging.INFO,
         verbose=None,
         llm_selector: Optional["LlmSelector"] = None,
@@ -205,7 +204,7 @@ class GlobalSettings(BaseModel):
         # only use llm_selector if no default_llm and default_streaming_llm is defined, because than we dont know what rules to set up
         default_llm = default_llm or init_chat_model("openai:gpt-4o-mini")
         # backward compatibility
-        default_streaming_llm = kwargs.pop("default_streaming_llm", None) or default_llm
+
         if not llm_selector:
             llm_selector = (
                 LlmSelector()
@@ -218,8 +217,13 @@ class GlobalSettings(BaseModel):
 
         if verbose is None:
             verbose = os.environ.get("LANGCHAIN_DECORATORS_VERBOSE", False) in [True,"true","True","1"]
-        settings = cls(default_llm=default_llm, default_streaming_llm=default_streaming_llm,
-                       logging_level=logging_level, verbose=verbose, llm_selector=llm_selector, **kwargs)
+        settings = cls(
+            default_llm=default_llm,
+            logging_level=logging_level,
+            verbose=verbose,
+            llm_selector=llm_selector,
+            **kwargs,
+        )
         if not hasattr(GlobalSettings, "registry"):
             setattr(GlobalSettings, "registry", {})
         GlobalSettings.registry[settings_type] = settings
