@@ -1,10 +1,12 @@
+import asyncio
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Callable, Optional, Union
+import json
+from typing import TYPE_CHECKING, Callable, Literal, Optional, Union
 from langchain.tools.base import BaseTool
 
 
-
 from langchain.schema.messages import ToolMessage, AIMessage
+from openai import BaseModel
 
 if TYPE_CHECKING:
     from .llm_tool_use import ToolsProvider, ToolCall  # Avoid circular import issues
@@ -36,7 +38,7 @@ class LlmChatSession:
 
         if self.parent_context and self.parent_context.tools_provider and not tools:
             self.tools_provider = self.parent_context.tools_provider
-       
+
         self._copy_messages_from_parent_context = copy_parent_context
         self.last_llm_response:AIMessage = None
         self._last_response_tool_calls: Optional[list["ToolCall"]] = None
@@ -61,10 +63,48 @@ class LlmChatSession:
         """Get the tool calls from the last LLM response."""
         if not self.last_llm_response:
             return None
-           
-        return self._last_response_tool_calls
 
-    
+        return self._last_response_tool_calls or []
+
+    async def execute_tool_calls(
+        self,
+        error_handling: Literal["fail_safe", "fail_fast", "custom"] = "fail_safe",
+        custom_error_handler: Optional[Callable[["ToolCall", Exception], str]] = None,
+    ):
+        """Execute the tool calls from the last LLM response."""
+        if not self.last_response_tool_calls:
+            return
+        from .llm_tool_use import ToolCall
+
+        async def tool_exec_wrapper(
+            tool_call: ToolCall, session: "LlmChatSession" = self
+        ):
+            """Wrapper to execute tool calls with error handling."""
+            with session:
+                try:
+                    return await tool_call.ainvoke()
+                except Exception as e:
+                    tool_call._result_original_value = e
+                    error_handled = e
+                    if custom_error_handler:
+                        error_handled = custom_error_handler(tool_call, e)
+                    tool_call.set_error_result(error_handled)
+
+                    if error_handling == "custom" and error_handled == e:
+                        raise e
+                    elif error_handling == "fail_fast":
+                        raise e
+                    else:
+                        return error_handled
+
+        tasks = []
+        for tool_call in self.last_response_tool_calls:
+            tasks.append(
+                asyncio.create_task(tool_exec_wrapper(tool_call, session=self))
+            )
+        return await asyncio.gather(
+            *tasks, return_exceptions=True if error_handling == "fail_safe" else False
+        )
 
     def add_message(self, message: AIMessage):
         """Add a message to the session."""
@@ -80,19 +120,14 @@ class LlmChatSession:
                         ToolCall(
                             name=tool_call_dict["name"],
                             args=tool_call_dict["args"],
-                            tool=func if isinstance(func, Callable) else None,
+                            function=func if isinstance(func, Callable) else None,
                             id=tool_call_dict.get("id"),
-                            metadata= {k:v for k,v in tool_call_dict.items() if k not in ["name", "arguments", "id"]}
+                            metadata={
+                                k: v
+                                for k, v in tool_call_dict.items()
+                                if k not in ["name", "arguments", "id"]
+                            },
                         )
                     )
             else:
                 self._last_response_tool_calls = None
-
-
-    def add_tool_call_result(self, tool_call_id:str, result:Union[dict, str], name:Optional[str]=None):
-        tool_call_match = next((tc for tc in self._last_response_tool_calls or [] if tc.id==tool_call_id), None)
-        self.message_history.append(ToolMessage(
-            id=tool_call_id,
-            content=result,
-            name=name if not tool_call_match else tool_call_match.name,
-        ))

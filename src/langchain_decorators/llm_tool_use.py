@@ -1,4 +1,3 @@
-
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Union, cast
 import asyncio
 import logging
@@ -176,7 +175,7 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
             raise ValueError("No function to execute")
         if not (self.function or self.function_async):
             raise ValueError("No function to execute")
-        
+
         if not self.function:
             raise ValueError("Function not set")
         else:
@@ -194,7 +193,7 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
         self.result = result
         self._result_generated=True
         return result
-    
+
     def _get_final_func_args(self, augment_args:Callable) -> Dict[str, Any]:
         call_kwargs = self.function_arguments or {}
         call_args=[]
@@ -212,7 +211,7 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
         """
         if not (self.function or self.function_async):
             raise ValueError("No function to execute")
-        
+
         if not self.function:
             raise ValueError("Function not set")
         else:
@@ -225,7 +224,7 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
             else:
                 call_args, call_kwargs = self._get_final_func_args(augment_args)
                 result= self.function(*call_args, **call_kwargs)
-            
+
         if asyncio.iscoroutine(result):
             try:
                 current_loop = asyncio.get_running_loop()
@@ -279,15 +278,17 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
         return ToolMessage(tool_call_id=self.tool_call_id, name=self.function_name, content=function_output)
 
 
-class ToolCall(BaseModel, Generic[T]):
+class ToolCall(BaseModel):
     """A tool call that can be used in a LLM chat session."""
 
     id: str
     name: str
     args: Union[Dict[str, Any], str, None] = None
     function: Optional[Callable] = None
-    result: Optional[T] = None
+    result: str = None
+    is_error_result: bool = False
     metadata: Optional[Dict[str, Any]] = None
+    _result_original_value: Any = PrivateAttr(None)
 
     def __init__(self, **data):
         if "args" in data and isinstance(data["args"], str):
@@ -300,33 +301,29 @@ class ToolCall(BaseModel, Generic[T]):
                 data["args"] = None
         super().__init__(**data)
 
-    def execute(self, **kwargs):
-        """Executes the tool call and sets the result ..."""
+    def invoke(self, **kwargs):
+        """Executes the tool call and sets the result + adds it to LlmChatSession if available"""
         _res = self(**kwargs)
         if asyncio.iscoroutine(_res):
             raise RuntimeError(
-                "Cannot execute async function synchronously. Please use execute_async() instead."
+                "Cannot execute async function synchronously. Please use ainvoke() instead."
             )
 
-        if LlmChatSession.get_current_session():
-            LlmChatSession.get_current_session().add_tool_call_result(self.id, _res)
+        self.set_result(_res)
+        return _res
 
-        return self.result
-
-    async def execute_async(self, **kwargs):
+    async def ainvoke(self, **kwargs):
         """
         Executes the tool call and sets the result ... regardless of whether the function is async or sync.
         """
-        _res = self(**kwargs)
+        _res = await self(**kwargs)
         if asyncio.iscoroutine(_res):
-            self.result = await _res
+            self._result_original_value = await _res
         else:
-            self.result = _res
+            self._result_original_value = _res
 
-        if LlmChatSession.get_current_session():
-            LlmChatSession.get_current_session().add_tool_call_result(self.id, _res)
-
-        return self.result
+        self.set_result(_res)
+        return _res
 
     def __call__(self, **kwargs):
         """Calls the function with the provided arguments."""
@@ -339,8 +336,52 @@ class ToolCall(BaseModel, Generic[T]):
             for key in kwargs:
                 if key.startswith("__arg"):
                     args.append(kwargs.pop(key))
-                    
+
             call_kwargs = self.args or {}
             call_kwargs.update(kwargs)
             return self.function(*args,**call_kwargs)
 
+    def _serialize_result(
+        self, tool_results: Union[BaseModel, dict, str, Exception, list, dict]
+    ) -> str:
+        """Serialize tool results to a JSON string."""
+        if isinstance(tool_results, BaseModel):
+            return tool_results.model_dump_json()
+        elif isinstance(tool_results, dict):
+            return json.dumps(tool_results)
+        elif isinstance(tool_results, list):
+            return "\n".join([self._serialize_result(item) for item in tool_results])
+        elif isinstance(tool_results, Exception):
+            return f"Error {tool_results.__class__.__name__}: {str(tool_results)}"
+        else:
+            return str(tool_results)
+
+    def set_result(self, result: Union[BaseModel, dict, str, list]):
+        if asyncio.iscoroutine(result):
+            raise RuntimeError(
+                "Result must be evaluated before setting it! Trying to set coroutine result"
+            )
+        self._result_original_value = result
+        self.result = self._serialize_result(result)
+        if LlmChatSession.get_current_session():
+            LlmChatSession.get_current_session().add_message(self.to_tool_message())
+        return self.result
+
+    def set_error_result(self, error: Union[Exception, str]):
+        self.is_error_result = True
+        if isinstance(error, Exception):
+            self.result = f"Error {error.__class__.__name__}: {str(error)}"
+        else:
+            self.result = str(error)
+        if LlmChatSession.get_current_session():
+            LlmChatSession.get_current_session().add_message(self.to_tool_message())
+
+    def to_tool_message(
+        self, result: Union[BaseModel, dict, str, list] = None
+    ) -> ToolMessage:
+        """Converts the tool call to a ToolMessage."""
+        result = result or self.result
+
+        return ToolMessage(
+            tool_call_id=self.id, content=result or self.result, name=self.name
+        )

@@ -5,5 +5,7 @@ from .streaming_context import StreamingContext
 from .prompt_decorator import llm_prompt
 from .function_decorator import llm_function, get_function_schema
 from .chains import ToolsProvider, FollowupHandle
+from .llm_tool_use import ToolCall, ToolsProvider
+from .llm_chat_session import LlmChatSession
 
 __version__ = "1.0.0"

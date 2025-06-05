@@ -439,10 +439,4 @@ class PromptDecoratorTemplate(StringPromptTemplate):
         return formatted
 
     def on_prompt_formatted(self, formatted:str):
-        if not self.prompt_type :
-            log_level = logging.DEBUG
-        else:
-            log_level = self.prompt_type.log_level
-
-        log_color =  LogColors.DARK_GRAY # we dont want to color the prompt, is's misleading... we color only the output
-        print_log(f"Prompt:\n{formatted}",  log_level , log_color)
+        pass

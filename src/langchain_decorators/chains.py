@@ -149,16 +149,16 @@ class LLMDecoratorChain(Runnable):
         **kwargs,
     ) -> Dict[str, Any]:
         """Call the chain with inputs."""
-        formatted_prompt, llm = self._prepare_execution(inputs, **kwargs)
-
-        result = llm.invoke(
-            input=formatted_prompt, config=config or self.default_config, **kwargs
-        )
 
         print_log(
             log_object=f"> Finished chain",
             log_level=self.prompt_type.log_level,
             color=LogColors.WHITE_BOLD,
+        )
+        formatted_prompt, llm = self._prepare_execution(inputs, **kwargs)
+
+        result = llm.invoke(
+            input=formatted_prompt, config=config or self.default_config, **kwargs
         )
 
         return result
@@ -171,13 +171,13 @@ class LLMDecoratorChain(Runnable):
 
     async def ainvoke(self, inputs, config=None, **kwargs):
         """Call the chain with inputs."""
-        formatted_prompt, llm = self._prepare_execution(inputs, **kwargs)
-
         print_log(
             log_object=f"> Entering {self.name} prompt decorator chain",
             log_level=self.prompt_type.log_level,
             color=LogColors.WHITE_BOLD,
         )
+
+        formatted_prompt, llm = self._prepare_execution(inputs, **kwargs)
 
         result = await llm.ainvoke(
             input=formatted_prompt, config=config or self.default_config
@@ -240,7 +240,7 @@ class LLMDecoratorChain(Runnable):
         kwargs.pop("inputs", None)
 
         formatted_prompt = self.prompt.format_prompt(**(_inputs or {}))
-
+        tools_provider = self.tools_provider
         session = LlmChatSession.get_current_session()
         if session:
             tools_provider = self.tools_provider or session.tools_provider
@@ -257,8 +257,6 @@ class LLMDecoratorChain(Runnable):
                         *session.message_history,
                     ]
                 )
-
-        tools_provider = self.tools_provider
 
         llm: BaseChatModel | Runnable = self.select_llm(formatted_prompt, _inputs)
         if self.capture_stream and StreamingContext.get_context():
@@ -293,6 +291,15 @@ class LLMDecoratorChain(Runnable):
             and not (session and session.suppress_output_parser)
         ):
             llm = llm | self.prompt.output_parser
+
+        if not self.prompt_type:
+            log_level = logging.DEBUG
+        else:
+            log_level = self.prompt_type.log_level
+
+        print_log(
+            f"Prompt:\n{formatted_prompt.to_string()}", log_level, LogColors.DARK_GRAY
+        )
 
         return formatted_prompt, llm
 
