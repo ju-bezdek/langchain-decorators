@@ -21,6 +21,8 @@ openai = "*"
 langchain = {extras = ["openai"], version = "*"}
 dotenv = "*"
 langchain-community = "*"
+build = "*"
+twine = "*"
 
 [requires]
 python_version = "3.9"

@@ -23,11 +23,14 @@ from langchain.prompts import StringPromptTemplate, PromptTemplate
 from langchain.prompts.chat import  MessagesPlaceholder, ChatMessagePromptTemplate, ChatPromptTemplate, ChatPromptValue
 from langchain.schema import PromptValue, BaseOutputParser, BaseMemory, BaseChatMessageHistory
 
-from promptwatch import register_prompt_template
 from .schema import OutputWithFunctionCall, PydanticListTypeWrapper
 from .common import LogColors, PromptTypeSettings, get_func_return_type, get_function_docs, get_function_full_name, print_log
 from .output_parsers import *
 
+try:
+    from promptwatch import register_prompt_template
+except ImportError:
+    register_prompt_template = lambda *args, **kwargs: None
 
 import pydantic
 if pydantic.__version__ <"2.0.0":
