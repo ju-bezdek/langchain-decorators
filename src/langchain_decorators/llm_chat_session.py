@@ -66,7 +66,26 @@ class LlmChatSession:
 
         return self._last_response_tool_calls or []
 
-    async def execute_tool_calls(
+    def is_calling_tool(self, tool: Union[str, Callable]) -> bool:
+        """Check if the last LLM response is calling a specific tool."""
+        if not self.last_llm_response:
+            return False
+        if not self.last_response_tool_calls:
+            return False
+        if isinstance(tool, str):
+            tool_name = tool
+        elif isinstance(tool, BaseTool):
+            tool_name = tool.name
+        elif isinstance(tool, Callable) and hasattr(tool, "function_name"):
+            tool_name = tool.function_name
+        else:
+            tool_name = tool.__name__ if hasattr(tool, "__name__") else str(tool)
+
+        return any(
+            tool_call.name == tool_name for tool_call in self.last_response_tool_calls
+        )
+
+    async def aexecute_tool_calls(
         self,
         error_handling: Literal["fail_safe", "fail_fast", "custom"] = "fail_safe",
         custom_error_handler: Optional[Callable[["ToolCall", Exception], str]] = None,
@@ -74,10 +93,9 @@ class LlmChatSession:
         """Execute the tool calls from the last LLM response."""
         if not self.last_response_tool_calls:
             return
-        from .llm_tool_use import ToolCall
 
         async def tool_exec_wrapper(
-            tool_call: ToolCall, session: "LlmChatSession" = self
+            tool_call: "ToolCall", session: "LlmChatSession" = self
         ):
             """Wrapper to execute tool calls with error handling."""
             with session:
@@ -105,6 +123,34 @@ class LlmChatSession:
         return await asyncio.gather(
             *tasks, return_exceptions=True if error_handling == "fail_safe" else False
         )
+
+    def execute_tool_calls(
+        self,
+        error_handling: Literal["fail_safe", "fail_fast", "custom"] = "fail_safe",
+        custom_error_handler: Optional[Callable[["ToolCall", Exception], str]] = None,
+    ):
+        """Execute the tool calls from the last LLM response."""
+        if not self.last_response_tool_calls:
+            return
+
+        results = []
+        for tool_call in self.last_response_tool_calls:
+            try:
+                results.append(tool_call.invoke())
+            except Exception as e:
+                tool_call._result_original_value = e
+                error_handled = e
+                if custom_error_handler:
+                    error_handled = custom_error_handler(tool_call, e)
+                tool_call.set_error_result(error_handled)
+
+                if error_handling == "custom" and error_handled == e:
+                    raise e
+                elif error_handling == "fail_fast":
+                    raise e
+                else:
+                    results.append(error_handled)
+        return results
 
     def add_message(self, message: AIMessage):
         """Add a message to the session."""

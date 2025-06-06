@@ -1,11 +1,11 @@
-# This example 
+# This example
 
 
 from typing import Any, Dict, List, Tuple
 from langchain_decorators import llm_prompt, PromptTypeSettings
 
 from langchain_decorators.prompt_template import BaseTemplateBuilder
-from langchain import PromptTemplate
+from langchain.prompts import PromptTemplate
 
 from langchain.llms import DeepInfra
 llama70 = DeepInfra(model_id="meta-llama/Llama-2-70b-chat-hf")
@@ -40,7 +40,9 @@ class LLama2TemplateBuilder(BaseTemplateBuilder):
 
             return PromptTemplate.from_template( "<s> " + '\n'.join(template_parts_final))
 
+
 llama70 = DeepInfra(model_id="meta-llama/Llama-2-70b-chat-hf") # define DEEPINFRA_API_TOKEN in your environment variables
+
 LLAMA2_PROMPT_TYPE = PromptTypeSettings(prompt_template_builder=LLama2TemplateBuilder(), llm=llama70)
 
 @llm_prompt(prompt_type=LLAMA2_PROMPT_TYPE)

@@ -258,7 +258,7 @@ class PromptDecoratorTemplate(StringPromptTemplate):
             default_values=default_values,
             format_instructions_parameter_key=format_instructions_parameter_key,
             prompt_type=prompt_type,
-            return_type=return_type,
+            return_type=return_type or str,
             original_kwargs=original_kwargs,
         )
 

@@ -1,83 +1,90 @@
-import asyncio
-from langchain_decorators import LlmChatSession
-from langchain_decorators.function_decorator import llm_function
-from langchain_decorators.llm_tool_use import ToolCall
-from langchain_decorators.prompt_decorator import llm_prompt
-
-# Example of  LlmChatSession use
-# to show of how to simulate a chat session with the LLM, where the messages are stored in the session
-
-@llm_prompt
-async def prompt_example(question: str) -> str:
-    """
-    ```<prompt:system>
-    You are a helpful assistant.
-    ```
-    ```<prompt:user>
-    Now reply as a pirate to the user question.
-    ```
-    ```<prompt:assistant>
-    Arrr matey! I be ready to assist ye with yer question.
-    ```
-    ```<prompt:user>
-    OK, stop being a pirate now.
-    ```
-    ```<prompt:user>
-    Pls answer the question: {question}
-    ```
-    """
-    pass
+import os
+import subprocess
+import sys
+import pytest
+from pathlib import Path
 
 
-def optional_tool_error_handler(tool_call:ToolCall, exception: Exception) -> str:
-    """Optional custom error handler for tool calls."""
-    if tool_call.name == "foo":
-        return f"Foo Error: {exception}"
-    else:
-        return exception # this make the exception reraise 
-    
-
-async def main_async_with_tools() -> str:
-
-    @llm_function
-    async def search_emails(
-        query: str, max_results: int = 5
-    ) -> list[str]:
-        """
-        Search for emails matching the query.
-        """
-        # Simulate email search
-        return [f"Email_id:{i} hidden" for i in range(max_results)]
-    with LlmChatSession(tools=[search_emails]) as session:
-        for simulated_usr_msg in [
-            "Can you search my emails?",
-            "Ok, let's do it... search for john doe emails"]:
-            response=None
-            while not response:
-                response = await prompt_example(question=simulated_usr_msg)
-                print(response)
+def get_code_examples_dir():
+    """Get the path to the code_examples directory."""
+    current_dir = Path(__file__).parent
+    code_examples_dir = current_dir.parent / "code_examples"
+    return code_examples_dir
 
 
-                # either handle the tool calls manually ... one by one
-                for tool_call in session.last_response_tool_calls:
-                    print(f"Tool call: {tool_call.name} with args: {tool_call.args}")
-                    # execute the tool call manually: 
-                    # await tool_call.execute_async()
-                    # or 
-                    # tool_call.invoke()
-                    # or 
-                    # res = tool_call(override_foo_arg="bar")
-                    # res = postprocess_the_result(res)
-                    # tool_call.set_result(res) 
-                    # ... or one could add the result message to session directly
-                    # session.add_message(tool_call.to_tool_message())
+def get_example_files():
+    """Get all Python files in the code_examples directory."""
+    code_examples_dir = get_code_examples_dir()
+    if not code_examples_dir.exists():
+        return []
 
-                # or use one liner to execute all tool calls and get the results
-                await session.execute_tool_calls(error_handling="fail_safe", custom_error_handler=optional_tool_error_handler)
+    python_files = list(code_examples_dir.glob("*.py"))
+
+    skip_files = [
+        "custom_template_block_builder_llama2.py",  # This requires deepinfra API token
+    ]
+    return [
+        f for f in python_files if f.name != "__init__.py" if f.name not in skip_files
+    ]
+
+
+@pytest.mark.parametrize("example_file", get_example_files(), ids=lambda x: x.name)
+def test_example_script_syntax_valid(example_file):
+    """Test that each example script has valid Python syntax and imports."""
+
+    # Test syntax by compiling the file
+    try:
+        with open(example_file, "r") as f:
+            source = f.read()
+        compile(source, str(example_file), "exec")
+    except SyntaxError as e:
+        pytest.fail(f"Syntax error in {example_file.name}: {e}")
+    except Exception as e:
+        pytest.fail(f"Failed to compile {example_file.name}: {e}")
+
+
+@pytest.mark.parametrize("example_file", get_example_files(), ids=lambda x: x.name)
+def test_example_script_runs_without_error(example_file):
+    """Test that each example script runs without throwing exceptions."""
+
+    # Run the script in a subprocess
+    try:
+        result = subprocess.run(
+            [sys.executable, str(example_file)],
+            cwd=str(example_file.parent),
+            capture_output=True,
+            text=True,
+            timeout=30,  # 30 second timeout
+        )
+
+        # Check if the script executed successfully
+        if result.returncode != 0:
+            error_msg = f"Script {example_file.name} failed with return code {result.returncode}\n"
+            error_msg += f"STDOUT:\n{result.stdout}\n"
+            error_msg += f"STDERR:\n{result.stderr}"
+            pytest.fail(error_msg)
+
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"Script {example_file.name} timed out after 30 seconds")
+    except Exception as e:
+        pytest.fail(f"Failed to run script {example_file.name}: {str(e)}")
+
+
+def test_code_examples_directory_exists():
+    """Test that the code_examples directory exists."""
+    code_examples_dir = get_code_examples_dir()
+    assert (
+        code_examples_dir.exists()
+    ), f"Code examples directory not found at {code_examples_dir}"
+
+
+def test_example_files_found():
+    """Test that we found some example files to test."""
+    example_files = get_example_files()
+    assert (
+        len(example_files) > 0
+    ), "No Python example files found in code_examples directory"
+
 
 if __name__ == "__main__":
-    asyncio.run(main_async_with_tools())
- 
-        
-
-
+    print(get_example_files())

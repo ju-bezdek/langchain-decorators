@@ -364,6 +364,7 @@ class LLMDecoratorChain(Runnable):
         """Process the output from the LLM."""
         output_message: AIMessage = None
         result = None
+        result_str = None
         session = LlmChatSession.get_current_session()
         if isinstance(llm_result, LLMResult):
             generations = llm_result.generations[0]
@@ -374,8 +375,10 @@ class LLMDecoratorChain(Runnable):
                     result = generation.message.content
                 else:
                     result = generation.text
+
             else:
                 raise ValueError(f"Expected one generation, got {len(generations)}")
+            result_str = result
         elif self.with_structured_output and isinstance(llm_result, dict):
             output_message = llm_result.get("raw")
 
@@ -386,11 +389,14 @@ class LLMDecoratorChain(Runnable):
                     result = llm_result["parsed"].items
                 else:
                     result = llm_result["parsed"]
+            result_str = llm_result.get("raw")
         elif isinstance(llm_result, BaseMessage):
             output_message = llm_result
             result = llm_result.content
+            result_str = result
         else:
             result = llm_result
+            result_str = result
 
         if session and output_message:
             session.add_message(output_message)
@@ -420,14 +426,16 @@ class LLMDecoratorChain(Runnable):
                 output_message=output_message,
             )
         print_log(
-            log_object=output_message.content
-            + (
-                (
-                    "Tool calls:\n"
-                    + "\n".join([str(tc) for tc in output_message.tool_calls])
+            log_object=(
+                result_str
+                + (
+                    (
+                        "\n---\nTool calls:\n"
+                        + "\n".join([str(tc) for tc in output_message.tool_calls])
+                    )
+                    if output_message and output_message.tool_calls
+                    else ""
                 )
-                if output_message.tool_calls
-                else ""
             ),
             log_level=logging.DEBUG,
             color=LogColors.GREEN,

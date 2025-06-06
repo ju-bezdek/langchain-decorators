@@ -35,7 +35,7 @@ def optional_tool_error_handler(tool_call:ToolCall, exception: Exception) -> str
         return f"Foo Error: {exception}"
     else:
         return exception # this make the exception reraise 
-    
+
 
 async def main_async_with_tools() -> str:
 
@@ -57,27 +57,25 @@ async def main_async_with_tools() -> str:
                 response = await prompt_example(question=simulated_usr_msg)
                 print(response)
 
-
                 # either handle the tool calls manually ... one by one
                 for tool_call in session.last_response_tool_calls:
                     print(f"Tool call: {tool_call.name} with args: {tool_call.args}")
-                    # execute the tool call manually: 
+                    # execute the tool call manually:
                     # await tool_call.execute_async()
-                    # or 
+                    # or
                     # tool_call.invoke()
-                    # or 
+                    # or
                     # res = tool_call(override_foo_arg="bar")
                     # res = postprocess_the_result(res)
-                    # tool_call.set_result(res) 
+                    # tool_call.set_result(res)
                     # ... or one could add the result message to session directly
                     # session.add_message(tool_call.to_tool_message())
 
                 # or use one liner to execute all tool calls and get the results
-                await session.execute_tool_calls(error_handling="fail_safe", custom_error_handler=optional_tool_error_handler)
+                await session.aexecute_tool_calls(
+                    error_handling="fail_safe",
+                    custom_error_handler=optional_tool_error_handler,
+                )
 
 if __name__ == "__main__":
     asyncio.run(main_async_with_tools())
- 
-        
-
-

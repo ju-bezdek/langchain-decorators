@@ -20,6 +20,7 @@ autopep8 = "*"
 openai = "*"
 langchain = {extras = ["openai"], version = "*"}
 dotenv = "*"
+langchain-community = "*"
 
 [requires]
 python_version = "3.9"
