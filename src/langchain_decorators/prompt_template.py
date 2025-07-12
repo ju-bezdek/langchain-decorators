@@ -430,7 +430,11 @@ class PromptDecoratorTemplate(StringPromptTemplate):
         formatted =  final_template.format_prompt(**kwargs)
         if isinstance(formatted,ChatPromptValue):
             for msg in list(formatted.messages):
-                if (not msg.content or not msg.content.strip() )and not msg.additional_kwargs:
+                if (
+                    isinstance(msg.content, str)
+                    and (not msg.content or not msg.content.strip())
+                    and not msg.additional_kwargs
+                ):
                     formatted.messages.remove(msg)
         self.on_prompt_formatted(formatted.to_string())
 
