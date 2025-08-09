@@ -7,7 +7,7 @@ authors = [
     {name = "ju-bezdek", email = "juraj.bezdek@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.9,<4.0"
+requires-python = ">=3.9"
 license = {text = "MIT"}
 keywords = ["langchain"]
 classifiers = [
@@ -15,6 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
 ]
+
 
 [project.urls]
 Homepage = "https://github.com/ju-bezdek/langchain-decorators"
@@ -29,3 +30,4 @@ where = ["src"]
 
 [tool.setuptools.dynamic]
 version = {attr = "langchain_decorators.__version__"}
+

@@ -34,6 +34,8 @@ SPECIAL_KWARGS = [
 
 def llm_prompt(
     prompt_type: PromptTypeSettings = PromptTypes.UNDEFINED,  # do not change the order of this first parameter unless you will change also the fist few lines... since we are handling cases when decorator is used with and without arguments too, than this will be the func
+    *,
+    model: str = None,
     template_format: str = "f-string-extra",
     output_parser: Union[str, None, BaseOutputParser] = "auto",
     stop_tokens: List[str] = None,
@@ -48,8 +50,8 @@ def llm_prompt(
     llm_selector_rule_key: Optional[str] = None,
     llm_selector: Optional[LlmSelector] = None,
     functions_source: str = None,
-    memory_source: str = None,
     control_kwargs: List[str] = SPECIAL_KWARGS,
+    **kwargs: Optional[Dict[str, Any]],
 ):
     """
     Decorator for functions that turns a regular function into a LLM prompt executed with default model and settings.
@@ -61,6 +63,8 @@ def llm_prompt(
 
     Args:
         `prompt_type`: (Optional[PromptTypeSettings]) - This allows you mark your prompt with one of the predefined prompt types (see PromptTypes class - but you can subclass it!) to predefine some settings like LLM or style and color of logging into console.
+
+        `model`: (Optional[str]) - The name of the model in langchain format, e.g. "openai:gpt-5"
 
         `template_format` (Optional[str]): one of [ `f-string` | `f-string-extra` ] ... f-string-extra is a superset of f-string template formats, enabling for optional sections.
 
@@ -132,9 +136,7 @@ def llm_prompt(
         _llm_selector_rule_key = llm_selector_rule_key
 
         if prompt_type:
-            _capture_stream = (
-                prompt_type.capture_stream if capture_stream is None else capture_stream
-            )
+            _capture_stream = capture_stream or prompt_type.capture_stream
         else:
             _capture_stream = capture_stream
         if _capture_stream and not is_async:
@@ -182,17 +184,8 @@ def llm_prompt(
                     _llm_selector = global_settings.llm_selector
 
                 if capture_stream and not _llm_selector:
-                    if not global_settings.default_streaming_llm:
-                        print_log(
-                            f"Warning: capture_stream on {name} is on, but the default LLM {llm} doesn't seem to be supporting streaming.",
-                            logging.WARNING,
-                            LogColors.YELLOW,
-                        )
 
-                    prompt_llm = (
-                        global_settings.default_streaming_llm
-                        or global_settings.default_llm
-                    )
+                    prompt_llm = global_settings.default_llm
                 else:
                     prompt_llm = global_settings.default_llm
 
@@ -499,6 +492,8 @@ def llm_prompt(
                 return llmChain.invoke(inputs={})
 
             wrapper.build_chain = build_chain
+            wrapper.__signature__ = inspect.signature(func)
+            wrapper.__annotations__ = dict(func.__annotations__)
 
             if inspect.signature(func).parameters.get("functions"):
                 if (
@@ -530,6 +525,8 @@ def llm_prompt(
 
                 return await llmChain.ainvoke(inputs={})
 
+            async_wrapper.__signature__ = inspect.signature(func)
+            async_wrapper.__annotations__ = dict(func.__annotations__)
             async_wrapper.build_chain = build_chain
             if inspect.signature(func).parameters.get("functions"):
                 if (
@@ -553,3 +550,10 @@ def llm_prompt(
         return decorator(func)
     else:
         return decorator
+
+
+def is_llm_prompt(func: Callable) -> bool:
+    """
+    Check if the function is decorated with @llm_prompt.
+    """
+    return hasattr(func, "build_chain")

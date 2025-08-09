@@ -1,25 +1,29 @@
 import asyncio
 from contextvars import ContextVar
 import json
-from typing import TYPE_CHECKING, Callable, Literal, Optional, Union
+from typing import TYPE_CHECKING, Callable, Coroutine, Literal, Optional, Union
 from langchain.tools.base import BaseTool
 
 
-from langchain.schema.messages import ToolMessage, AIMessage
+from langchain.schema.messages import ToolMessage, AIMessage, HumanMessage, BaseMessage
 from openai import BaseModel
 
 if TYPE_CHECKING:
     from .llm_tool_use import ToolsProvider, ToolCall  # Avoid circular import issues
+
 
 class LlmChatSession:
     _context = ContextVar("llm_chat_session", default=None)
 
     def __init__(
         self,
-        tools: Union[list[Union[Callable, BaseTool]], "ToolsProvider"],
+        tools: Union[list[Union[Callable, BaseTool]], "ToolsProvider"] = None,
         message_history: list = None,
         copy_parent_context: bool = False,
         suppress_output_parser: bool = False,
+        on_stream_token: Optional[
+            Callable[[str], Union[None, Coroutine[None, None, None]]]
+        ] = None,
     ):
         """Initialize the LlmChatSession with a list of tools or a ToolsProvider."""
         from .llm_tool_use import ToolsProvider
@@ -31,7 +35,11 @@ class LlmChatSession:
         else:
             self.tools_provider = None
         self.parent_context: LlmChatSession = self._context.get()
-        if not message_history and self.parent_context and self._copy_messages_from_parent_context:
+        if (
+            not message_history
+            and self.parent_context
+            and self._copy_messages_from_parent_context
+        ):
             self.message_history = list(self.parent_context.message_history)
         else:
             self.message_history = message_history or []
@@ -40,9 +48,27 @@ class LlmChatSession:
             self.tools_provider = self.parent_context.tools_provider
 
         self._copy_messages_from_parent_context = copy_parent_context
-        self.last_llm_response:AIMessage = None
+        self.last_llm_response: AIMessage = None
         self._last_response_tool_calls: Optional[list["ToolCall"]] = None
-        self.suppress_output_parser = suppress_output_parser
+        self.suppressed_output_parser = suppress_output_parser
+        self.suppressed_structured_output = False
+        self.on_stream_token = on_stream_token
+        self._streaming_context = None
+
+    def with_stream(
+        self,
+        on_stream_token: Callable[[str], Union[None, Coroutine]],
+    ):
+        """Set the streaming callback for the session."""
+        self.on_stream_token = on_stream_token
+
+        return self
+
+    def suppress_structured_output(self, suppress: bool = True):
+        """Suppress the output parser for the session."""
+        self.suppressed_output_parser = suppress
+        self.suppressed_structured_output = suppress
+        return self
 
     @classmethod
     def get_current_session(cls) -> "LlmChatSession":
@@ -52,14 +78,21 @@ class LlmChatSession:
     def __enter__(self):
         """Enter the LlmChatSession context."""
         self._context.set(self)
+        if self.on_stream_token:
+            from .streaming_context import StreamingContext
+
+            self._streaming_context = StreamingContext(self.on_stream_token).__enter__()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         """Exit the LlmChatSession context."""
         self._context.set(self.parent_context)
+        if self._streaming_context:
+            self._streaming_context.__exit__(exc_type, exc_value, traceback)
+            self._streaming_context = None
 
     @property
-    def last_response_tool_calls(self)->Optional[list["ToolCall"]]:
+    def last_response_tool_calls(self) -> Optional[list["ToolCall"]]:
         """Get the tool calls from the last LLM response."""
         if not self.last_llm_response:
             return None
@@ -152,16 +185,32 @@ class LlmChatSession:
                     results.append(error_handled)
         return results
 
-    def add_message(self, message: AIMessage):
+    def add_message(
+        self,
+        message: Union[BaseMessage, str],
+        message_type: Literal["ai", "user", "tool"] = None,
+    ):
         """Add a message to the session."""
+        if isinstance(message, str):
+            if message_type == "ai":
+                message = AIMessage(content=message)
+            elif message_type == "human" or message_type == "user":
+                message = HumanMessage(content=message)
+            elif message_type == "tool":
+                message = ToolMessage(content=message)
+            else:
+                raise ValueError("Invalid message type. Use 'ai', 'human', or 'tool'.")
         self.message_history.append(message)
         if isinstance(message, AIMessage):
             self.last_llm_response = message
             if message.tool_calls:
                 self._last_response_tool_calls = []
                 from .llm_tool_use import ToolCall
-                for tool_call_dict in  self.last_llm_response.tool_calls:
-                    func = self.tools_provider.get_tool_by_name(tool_call_dict["name"],raise_errors=False)
+
+                for tool_call_dict in self.last_llm_response.tool_calls:
+                    func = self.tools_provider.get_tool_by_name(
+                        tool_call_dict["name"], raise_errors=False
+                    )
                     self._last_response_tool_calls.append(
                         ToolCall(
                             name=tool_call_dict["name"],

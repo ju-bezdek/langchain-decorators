@@ -1,12 +1,13 @@
 from contextvars import ContextVar
 import inspect
 import json
+import typing
 import logging
 from functools import wraps
 from pdb import run
 from time import time
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Union, cast
-
+from langchain_core.runnables.config import ensure_config, merge_configs
 from .streaming_context import StreamingContext
 from .llm_chat_session import LlmChatSession
 from .common import deprecated
@@ -52,7 +53,8 @@ from .prompt_template import PromptDecoratorTemplate
 from .schema import OutputWithFunctionCall, PydanticListTypeWrapper
 
 import pydantic
-if pydantic.__version__ <"2.0.0":
+
+if pydantic.__version__ < "2.0.0":
     from pydantic import BaseModel, PrivateAttr
     from pydantic import root_validator as model_validator
 
@@ -73,12 +75,11 @@ from .llm_tool_use import ToolsProvider, get_function_schema
 
 FunctionsProvider = ToolsProvider
 
-CachedChatLLM = None
 register_prompt_template = None
 
 
 try:
-    from promptwatch import CachedChatLLM, register_prompt_template
+    from promptwatch import register_prompt_template
 except ImportError:
     pass
 
@@ -93,12 +94,12 @@ class LLMDecoratorChain(Runnable):
     name: str
     llm_selector: Optional[LlmSelector] = None
     """ Optional LLM selector to pick the right LLM for the job. """
-    capture_stream: bool = False
+    capture_stream: bool = None
     expected_gen_tokens: Optional[int] = None
     llm_selector_rule_key: Optional[str] = None
     allow_retries: bool = True
     format_instructions_parameter_key: str = "FORMAT_INSTRUCTIONS"
-    default_config: RunnableConfig
+
     return_type: Optional[Type] = None
 
     prompt_type: PromptTypeSettings = PromptTypes.UNDEFINED
@@ -111,7 +112,7 @@ class LLMDecoratorChain(Runnable):
         name: str,
         prompt: PromptDecoratorTemplate,
         llm: BaseLanguageModel,
-        capture_stream: bool = False,
+        capture_stream: bool = None,
         expected_gen_tokens: Optional[int] = None,
         llm_selector: Optional[LlmSelector] = None,
         llm_selector_rule_key: Optional[str] = None,
@@ -140,7 +141,7 @@ class LLMDecoratorChain(Runnable):
         self.with_structured_output = with_structured_output
         self.tools_provider = tools_provider
         self.return_type = return_type
-        self.default_config: RunnableConfig = default_config or RunnableConfig()
+        self.default_config: RunnableConfig = default_config
 
     def __call__(
         self,
@@ -150,11 +151,6 @@ class LLMDecoratorChain(Runnable):
     ) -> Dict[str, Any]:
         """Call the chain with inputs."""
 
-        print_log(
-            log_object=f"> Finished chain",
-            log_level=self.prompt_type.log_level,
-            color=LogColors.WHITE_BOLD,
-        )
         formatted_prompt, llm = self._prepare_execution(inputs, **kwargs)
 
         result = llm.invoke(
@@ -165,30 +161,37 @@ class LLMDecoratorChain(Runnable):
 
     def invoke(self, inputs: dict, config=None, **kwargs):
         """Execute the chain and return outputs"""
-        return self.__call__(
-            inputs=inputs, config=config or self.default_config, **kwargs
+        config = ensure_config(config or self.default_config)
+        print_log(
+            log_object=f"> Entering {self.name} prompt decorator chain",
+            log_level=self.prompt_type.log_level,
+            color=LogColors.WHITE_BOLD,
         )
+        res = self.__call__(inputs=inputs, config=config, **kwargs)
+        print_log(
+            log_object=f"> Finished chain",
+            log_level=self.prompt_type.log_level,
+            color=LogColors.WHITE_BOLD,
+        )
+        return res
 
     async def ainvoke(self, inputs, config=None, **kwargs):
         """Call the chain with inputs."""
+        config = merge_configs(ensure_config(config=config), self.default_config)
         print_log(
             log_object=f"> Entering {self.name} prompt decorator chain",
             log_level=self.prompt_type.log_level,
             color=LogColors.WHITE_BOLD,
         )
 
-        formatted_prompt, llm = self._prepare_execution(inputs, **kwargs)
+        formatted_prompt, llm = self._prepare_execution(inputs, config=config, **kwargs)
 
-        result = await llm.ainvoke(
-            input=formatted_prompt, config=config or self.default_config
-        )
-
+        result = await llm.ainvoke(input=formatted_prompt, config=config)
         print_log(
             log_object=f"> Finished chain",
             log_level=self.prompt_type.log_level,
             color=LogColors.WHITE_BOLD,
         )
-
         return result
 
     def find_and_apply_on_llm(
@@ -216,6 +219,7 @@ class LLMDecoratorChain(Runnable):
     def _prepare_execution(
         self,
         inputs: Union[Dict[str, Any], Any] = None,
+        config: Optional[RunnableConfig] = None,
         **kwargs,
     ):
         """Prepare execution by processing inputs and setting up the LLM chain."""
@@ -245,11 +249,16 @@ class LLMDecoratorChain(Runnable):
         if session:
             tools_provider = self.tools_provider or session.tools_provider
             if isinstance(formatted_prompt, ChatPromptValue):
-
-                formatted_prompt.messages = [
-                    *formatted_prompt.messages,
-                    *session.message_history,
-                ]
+                if not any(
+                    1
+                    for template in self.prompt.prompt_template_drafts
+                    if template.role == "placeholder"
+                ):
+                    # add messages from session to the prompt, if there is no placeholder
+                    formatted_prompt.messages = [
+                        *formatted_prompt.messages,
+                        *session.message_history,
+                    ]
             elif isinstance(formatted_prompt, StringPromptValue):
                 formatted_prompt = ChatPromptValue(
                     messages=[
@@ -259,12 +268,17 @@ class LLMDecoratorChain(Runnable):
                 )
 
         llm: BaseChatModel | Runnable = self.select_llm(formatted_prompt, _inputs)
-        if self.capture_stream and StreamingContext.get_context():
+        if StreamingContext.get_context() and self.capture_stream is not False:
             kwargs["stream"] = True
-            self.default_config["callbacks"] = kwargs.pop("callbacks", [])
-            self.default_config["callbacks"].append(
-                StreamingContext.StreamingContextCallback()
+            config["callbacks"] = (
+                kwargs.pop("callbacks", None) or config.get("callbacks") or []
             )
+            if isinstance(config["callbacks"], list):
+                config["callbacks"].append(StreamingContext.StreamingContextCallback())
+            elif isinstance(config["callbacks"], BaseCallbackManager):
+                config["callbacks"].add_handler(
+                    StreamingContext.StreamingContextCallback()
+                )
 
         if tools_provider:
             llm = self._bind_tools_to_llm(
@@ -278,7 +292,9 @@ class LLMDecoratorChain(Runnable):
 
         llm = llm.bind(**llm_kwargs, **kwargs)
 
-        if self.with_structured_output:
+        if self.with_structured_output and not (
+            session and session.suppressed_structured_output
+        ):
 
             llm = llm.with_structured_output(
                 self.with_structured_output, include_raw=True
@@ -288,7 +304,7 @@ class LLMDecoratorChain(Runnable):
         if (
             not self.with_structured_output
             and self.prompt.output_parser
-            and not (session and session.suppress_output_parser)
+            and not (session and session.suppressed_output_parser)
         ):
             llm = llm | self.prompt.output_parser
 
@@ -382,7 +398,7 @@ class LLMDecoratorChain(Runnable):
         elif self.with_structured_output and isinstance(llm_result, dict):
             output_message = llm_result.get("raw")
 
-            if session and session.suppress_output_parser:
+            if session and session.suppressed_output_parser:
                 result = llm_result.get("raw", {}).get("content", "")
             else:
                 if issubclass(self.with_structured_output, PydanticListTypeWrapper):
@@ -391,9 +407,24 @@ class LLMDecoratorChain(Runnable):
                     result = llm_result["parsed"]
             result_str = llm_result.get("raw")
         elif isinstance(llm_result, BaseMessage):
-            output_message = llm_result
-            result = llm_result.content
-            result_str = result
+            if issubclass(self.return_type, BaseMessage):
+                result = llm_result
+            elif typing.get_origin(self.return_type) == tuple:
+                output_message = llm_result
+                if isinstance(llm_result.content, str):
+                    result = (llm_result.content,)
+                elif isinstance(llm_result.content, list):
+                    result = tuple(llm_result.content)
+            else:
+                output_message = llm_result
+                result = llm_result.content
+                if result and isinstance(result, list) and isinstance(result[0], dict):
+
+                    if text_res := next(
+                        ((item["text"] for item in result if "text" in item)), None
+                    ):
+                        result = text_res
+                result_str = result
         else:
             result = llm_result
             result_str = result
@@ -427,7 +458,7 @@ class LLMDecoratorChain(Runnable):
             )
         print_log(
             log_object=(
-                result_str
+                str(result_str)
                 + (
                     (
                         "\n---\nTool calls:\n"
