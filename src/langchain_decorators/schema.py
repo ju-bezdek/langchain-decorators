@@ -46,6 +46,24 @@ class MessageAttachment(BaseModel):
             raise ValueError("input must be str or bytes")
         return v
 
+    def __init__(
+        self,
+        data: Union[str, bytes],
+        type: Literal["image", "file", "pdf", "audio"],
+        source_type: Optional[Literal["base64", "url"]],
+        mime_type: Optional[str] = None,
+        file_name: Optional[str] = None,
+        extra: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            data=data,
+            type=type,
+            source_type=source_type,
+            mime_type=mime_type,
+            file_name=file_name,
+            extra=extra,
+        )
+
 
 class PydanticListTypeWrapper(BaseModel, Generic[T]):
     items: List[T] = pydantic.Field(default_factory=list)

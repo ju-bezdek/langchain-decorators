@@ -6,15 +6,12 @@ dependencies = ["langchain-core", "typing-inspect"]
 authors = [
     {name = "ju-bezdek", email = "juraj.bezdek@gmail.com"}
 ]
+version = "1.0.0rc4"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 keywords = ["langchain"]
-classifiers = [
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-]
+
 
 
 [project.urls]
@@ -30,4 +27,11 @@ where = ["src"]
 
 [tool.setuptools.dynamic]
 version = {attr = "langchain_decorators.__version__"}
+
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "^8.2.3"
+myst-parser = "^4.0.1"
+sphinxext-opengraph = "^0.12.0"
+furo = "^2025.7.19"
 
