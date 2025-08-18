@@ -18,6 +18,16 @@ keywords = ["langchain"]
 Homepage = "https://github.com/ju-bezdek/langchain-decorators"
 Repository = "https://github.com/ju-bezdek/langchain-decorators"
 
+[project.optional-dependencies]
+# Install LangGraph support: pip install langchain-decorators[langgraph]
+langgraph = [
+    "langgraph"
+]
+# Developer convenience extras: pip install -e .[dev]
+dev = [
+    "langgraph"
+]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -34,4 +44,8 @@ sphinx = "^8.2.3"
 myst-parser = "^4.0.1"
 sphinxext-opengraph = "^0.12.0"
 furo = "^2025.7.19"
+
+
+[tool.poetry.group.dev.dependencies]
+langgraph = "^0.6.5"
 

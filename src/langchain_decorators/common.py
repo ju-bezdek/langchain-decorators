@@ -46,6 +46,15 @@ except ImportError:
         return ChatOpenAI(model_name=model_name, **kwargs)
 
 
+try:
+    import openai
+
+    OPENAI_INSTALLED = True
+except Exception:
+    OPENAI_INSTALLED = False
+    pass
+
+
 if pydantic.__version__ < "2.0.0":
     from pydantic import BaseModel, Extra
 
@@ -426,19 +435,19 @@ class PromptTypes:
     GPT4: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
-        llm=init_chat_model("openai:gpt-4o"),
+        llm=init_chat_model("openai:gpt-4o") if OPENAI_INSTALLED else None,
     )
 
     GPT5: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
-        llm=init_chat_model("openai:gpt-5"),
+        llm=init_chat_model("openai:gpt-5") if OPENAI_INSTALLED else None,
     )
 
     GPT4o: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
-        llm=init_chat_model("openai:gpt-4o"),
+        llm=init_chat_model("openai:gpt-4o") if OPENAI_INSTALLED else None,
     )
 
     AGENT_REASONING: PromptTypeSettings = PromptTypeSettings(

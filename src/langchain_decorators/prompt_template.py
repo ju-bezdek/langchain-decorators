@@ -47,10 +47,10 @@ from .common import (
 )
 from .output_parsers import *
 
-try:
-    from promptwatch import register_prompt_template
-except ImportError:
-    register_prompt_template = lambda *args, **kwargs: None
+# try:
+#     from promptwatch import register_prompt_template
+# except ImportError:
+register_prompt_template = lambda *args, **kwargs: None
 
 import pydantic
 

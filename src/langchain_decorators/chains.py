@@ -78,10 +78,10 @@ FunctionsProvider = ToolsProvider
 register_prompt_template = None
 
 
-try:
-    from promptwatch import register_prompt_template
-except ImportError:
-    pass
+# try:
+#     from promptwatch import register_prompt_template
+# except ImportError:
+#     pass
 
 try:
     from langchain_openai import ChatOpenAI
