@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ pathto('_static/custom.css', 1) }}">
+    {% if og_image %}
+    <meta property="og:image" content="{{ og_image }}">
+    {% endif %}
+    {% if og_description %}
+    <meta property="og:description" content="{{ og_description }}">
+    {% endif %}
+    {% if og_title %}
+    <meta property="og:title" content="{{ og_title }}">
+    {% endif %}
+    {{ meta }}
+</head>
+<body>
+    <header>
+        <h1>{{ project }}</h1>
+        <nav>
+            <ul>
+                <li><a href="{{ pathto('index.html', 1) }}">Home</a></li>
+                <li><a href="{{ pathto('getting-started.html', 1) }}">Getting Started</a></li>
+                <li><a href="{{ pathto('usage/prompts.html', 1) }}">Usage</a></li>
+                <li><a href="{{ pathto('reference/api.html', 1) }}">API Reference</a></li>
+                <li><a href="{{ pathto('changelog.html', 1) }}">Changelog</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        {{ body }}
+    </main>
+    <footer>
+        <p>&copy; {{ year }} {{ project }}. All rights reserved.</p>
+    </footer>
+</body>
+</html>

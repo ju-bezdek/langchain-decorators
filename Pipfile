@@ -5,16 +5,24 @@ name = "pypi"
 
 [packages]
 langchain_decorators = {editable = true, path = "."}
-promptwatch="*"
-pydantic = "*"
-langchain = "*"
-langchain-openai = "*"
+pydantic = ">=2.0"
+langchain-core = "*"
+typing-inspect = "*"
 
 [dev-packages]
+"ipython doctest plugin" = {file = ".", editable = true}
+pytest-asyncio = "*"
+python-dotenv = "*"
+pytest-dotenv = "*"
 ipykernel = "*"
 persistqueue = "*"
 autopep8 = "*"
 openai = "*"
+langchain = {extras = ["openai"], version = "*"}
+dotenv = "*"
+langchain-community = "*"
+build = "*"
+twine = "*"
 
 [requires]
 python_version = "3.9"

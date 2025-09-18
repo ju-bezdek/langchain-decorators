@@ -1,3 +1,52 @@
+[project]
+name = "langchain-decorators"
+# dynamic = ["version"]
+description = "syntactic sugar for langchain"
+dependencies = ["langchain-core", "typing-inspect"]
+authors = [
+    {name = "ju-bezdek", email = "juraj.bezdek@gmail.com"}
+]
+version = "1.0.0"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+keywords = ["langchain"]
+
+
+
+[project.urls]
+Homepage = "https://github.com/ju-bezdek/langchain-decorators"
+Repository = "https://github.com/ju-bezdek/langchain-decorators"
+
+[project.optional-dependencies]
+# Install LangGraph support: pip install langchain-decorators[langgraph]
+langgraph = [
+    "langgraph"
+]
+# Developer convenience extras: pip install -e .[dev]
+dev = [
+    "langgraph"
+]
+
 [build-system]
 requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta:__legacy__"
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "langchain_decorators.__version__"}
+
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "^8.2.3"
+myst-parser = "^4.0.1"
+sphinxext-opengraph = "^0.12.0"
+furo = "^2025.7.19"
+
+
+[tool.poetry.group.dev.dependencies]
+langgraph = "^0.6.5"
+langgraph-cli = {extras = ["inmem"], version = "^0.4.2"}
+

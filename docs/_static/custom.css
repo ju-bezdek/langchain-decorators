@@ -1,0 +1,38 @@
+/* Custom CSS for LangChain Decorators Documentation */
+
+/* Example styles to customize the appearance of the documentation */
+
+/* Body styles */
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+}
+
+/* Header styles */
+h1, h2, h3 {
+    color: #2c3e50;
+}
+
+/* Link styles */
+a {
+    color: #2980b9;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Code block styles */
+code {
+    background-color: #f4f4f4;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+/* Customizing the footer */
+footer {
+    background-color: #ecf0f1;
+    padding: 10px;
+    text-align: center;
+}

@@ -1,0 +1,4 @@
+Sphinx==5.3.0
+MyST-Parser==0.17.0
+sphinxext-opengraph==0.5.0
+Furo==2023.1.22
