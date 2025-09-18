@@ -27,10 +27,10 @@ from .node_tool import (
     node_tool,
 )
 
-from .node_transition import (
+from .transitions import (
     get_conditional_transition_edges,
     is_node_transition,
-    node_transition,
+    conditional_transition,
 )
 
 from langchain_core.runnables import (
@@ -123,34 +123,33 @@ class LlmNodeBase:
     async def ainvoke(cls, state: Any, config: RunnableConfig):
         myself = cls(state, config)
         if node_name := config["metadata"].get("langgraph_node"):
+            _description = cls.get_description()
+            func_name = _description["node_to_func"].get(node_name, node_name)
 
-            func_name = cls.get_description()["node_to_func"].get(node_name, node_name)
             kwargs = myself.get_node_args(func_name)
-            if node_name in cls.get_description()["prompt_nodes"]:
+            if node_name in _description["prompt_nodes"]:
                 prompt = getattr(myself, node_name)
-
-                return await myself.acall_prompt(node_name, prompt, kwargs)
+                res = await myself.acall_prompt(node_name, prompt, kwargs)
             else:
                 res = getattr(myself, func_name)(**kwargs)
                 if asyncio.iscoroutine(res):
                     res = await res
-                return res
+            return res
 
     @classmethod
     async def invoke(cls, state: Any, config: RunnableConfig):
         myself = cls(state, config)
         if node_name := config["metadata"].get("langgraph_node"):
-            func_name = cls.get_description()["node_to_func"].get(node_name, node_name)
-            kwargs = myself.get_node_args(func_name)
-            if node_name in cls.get_description()["prompt_nodes"]:
-                prompt = getattr(myself, node_name)
+            _description = cls.get_description()
+            func_name = _description["node_to_func"].get(node_name, node_name)
 
-                return await myself.call_prompt(node_name, prompt, kwargs)
+            kwargs = myself.get_node_args(func_name)
+            if node_name in _description["prompt_nodes"]:
+                prompt = getattr(myself, node_name)
+                res = myself.call_prompt(node_name, prompt, kwargs)
             else:
                 res = getattr(myself, func_name)(**kwargs)
-                if iscoroutine(res):
-                    res = await res
-                return res
+            return res
 
     def call_prompt(
         self, prompt_node: str, prompt_call: callable, kwargs: dict[str, Any]
@@ -199,7 +198,13 @@ class LlmNodeBase:
     def _handle_prompt_response(
         self, prompt_name: str, response: Any, ai_message: AIMessage
     ) -> dict:
-        return {"messages": [ai_message]}
+        _description = self.get_description()
+        node_info = _description["nodes"].get(prompt_name)
+        if node_info and node_info.get("store_output_as"):
+            updates = {node_info["store_output_as"]: response}
+        else:
+            updates = {}
+        return {"messages": [ai_message], **updates}
 
     def get_tools(self, prompt_node: str):
         return self._get_tools_for_node(prompt_node)
@@ -403,7 +408,7 @@ class LlmNodeBase:
             prompt_nodes_with_tools = set()
             for tool_bindings in description["tools"].values():
                 if not tool_bindings:
-                    prompt_nodes_with_tools = description["prompt_nodes"]
+                    prompt_nodes_with_tools = set(description["prompt_nodes"])
                 else:
                     prompt_nodes_with_tools.update(tool_bindings)
 
@@ -521,7 +526,7 @@ class Router:
         return RunnableLambda(cls.invoke, name=cls.__name__)
 
     @classmethod
-    def add_to_graph(
+    def add_edges_to_graph(
         cls,
         graph: StateGraph,
         source: str,

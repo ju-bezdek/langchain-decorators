@@ -174,9 +174,6 @@ def get_arguments_as_pydantic_fields(func) -> Dict[str, Tuple[Type, pydantic.Fie
                 raise Exception(
                     f"Argument '{arg_name}' of function {func.__name__} has no type annotation"
                 )
-            if get_origin(arg_desc.annotation) == Annotated:
-                if "Injected" in str(arg_desc.annotation):
-                    continue
 
             model_kwargs = {}
             if arg_desc.default == inspect.Parameter.empty:

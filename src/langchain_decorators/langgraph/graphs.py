@@ -39,25 +39,30 @@ TState = TypeVar("TState")
 
 
 class SequentialGraphMeta(type):
-    def __getitem__(cls, state_type) -> Type["SequentialGraph"]:
+    def __getitem__(cls, state_schema) -> Type["SequentialGraph"]:
         # Create a new class that remembers the state type
         class TypedGraph(cls):
-            graph_state_type = state_type
+            graph_state_schema = state_schema
 
         return TypedGraph
 
 
 class _GraphBuilder:
     # state_graph: StateGraph
-    # graph_state_type: Type[Any]
+    graph_state_schema: Type[Any]
+    llm_nodes: list[LlmNodeBase]
 
     def __init__(
-        self, state_graph: StateGraph = None, graph_state_type: Type[Any] = None
+        self, state_graph: StateGraph = None, graph_state_schema: Type[Any] = None
     ):
-        self.graph_state_type = graph_state_type
-
-        if state_graph is None and graph_state_type is not None:
-            self.state_graph = StateGraph(state_schema=graph_state_type)
+        self.graph_state_schema = graph_state_schema
+        self.llm_nodes: list[Type] = list()
+        if not graph_state_schema:
+            raise Exception(
+                f"Graph state schema is required ... pls define schema using `{self.__class__.__name__}[YourGraphSchema]`.start()... syntax"
+            )
+        if state_graph is None:
+            self.state_graph = StateGraph(state_schema=graph_state_schema)
         else:
             self.state_graph = state_graph
 
@@ -68,6 +73,7 @@ class _GraphBuilder:
         if isinstance(action, tuple):
             key, action = action
             if isinstance(action, type) and issubclass(action, LlmNodeBase):
+                self.llm_nodes.append(action)
                 action = action.compile()
             if not isinstance(key, str):
                 raise ValueError(
@@ -86,6 +92,7 @@ class _GraphBuilder:
                 return action, None
             if isinstance(action, type) and issubclass(action, LlmNodeBase):
                 key = action.__name__
+                self.llm_nodes.append(action)
                 action = action.compile()
             elif hasattr(action, "__name__"):
                 key = action.__name__
@@ -167,7 +174,7 @@ class _GraphBuilder:
             key, action = self._path_to_key_and_action(node_key)
             routes_to_keys[condition] = key
 
-        Router.add_to_graph(
+        Router.add_edges_to_graph(
             self.state_graph,
             from_node_key,
             routes_to_keys,
@@ -191,9 +198,9 @@ class _GraphBuilder:
 
         return SequentialGraphBuilderCursor(self, next_keys)
 
-    def compile(self):
+    def compile(self, **kwargs):
 
-        return self.state_graph.compile()
+        return self.state_graph.compile(**kwargs)
 
 
 class SequentialGraph(_GraphBuilder, metaclass=SequentialGraphMeta):
@@ -206,15 +213,15 @@ class SequentialGraph(_GraphBuilder, metaclass=SequentialGraphMeta):
         """
 
         state_type = None
-        if hasattr(cls, "graph_state_type"):
+        if hasattr(cls, "graph_state_schema"):
             # Try to determine the schema from generic arguments of the class
-            state_type = getattr(cls, "graph_state_type")
+            state_type = getattr(cls, "graph_state_schema")
         else:
-            state_type = dict
+            state_type = None
 
         # If no graph provided, create one with the state type
 
-        _graph = cls(graph_state_type=state_type)
+        _graph = cls(graph_state_schema=state_type)
 
         return SequentialGraphBuilderCursor(_graph, "__start__")
 
@@ -227,12 +234,12 @@ class StagedGraphStateMin(TypedDict):
 class StagedGraphMeta(type):
 
     @classmethod
-    def _get_state_type(cls, state_type) -> Type["StagedGraphStateMin"]:
+    def _get_graph_schema(cls, state_type) -> Type["StagedGraphStateMin"]:
         if (
             issubclass(state_type, dict)
             and getattr(cls, "__annotations__", None) is not None
         ):
-            graph_state_type = TypedDict(
+            graph_state_schema = TypedDict(
                 f"{state_type.__name__}StagedGraphState",
                 {
                     **StagedGraphStateMin.__annotations__,
@@ -240,7 +247,7 @@ class StagedGraphMeta(type):
                 },
             )
         elif issubclass(state_type, BaseModel):
-            graph_state_type = create_model(
+            graph_state_schema = create_model(
                 f"{state_type.__name__}StagedGraphState",
                 __base__=state_type,
                 **StagedGraphStateMin.__annotations__,
@@ -248,13 +255,13 @@ class StagedGraphMeta(type):
         else:
             raise TypeError(f"Unsupported state type: {state_type}")
 
-        return graph_state_type
+        return graph_state_schema
 
     def __getitem__(cls, state_type) -> Type["StagedGraph"]:
 
         # Create a new class that remembers the state type
         class TypedGraph(cls):
-            graph_state_type = StagedGraphMeta._get_state_type(state_type)
+            graph_state_schema = StagedGraphMeta._get_graph_schema(state_type)
 
         return TypedGraph
 
@@ -291,7 +298,7 @@ class StagedGraph(_GraphBuilder, metaclass=StagedGraphMeta):
             return Command(goto="__end__")
 
     @classmethod
-    def _compile(cls, cursor: "StagedGraphBuilderCursor"):
+    def _compile(cls, cursor: "StagedGraphBuilderCursor", **kwargs):
         stages_list = list(cursor.stages)
 
         command_with_first_stage_annotated = Command[Literal[*tuple(stages_list[:1])]]
@@ -325,13 +332,13 @@ class StagedGraph(_GraphBuilder, metaclass=StagedGraphMeta):
         # cursor.graph.state_graph.add_edge("__start__", "__next__")
         cursor.graph.state_graph.add_edge("__next__", "__continue__")
 
-        for i, (stage_name, stage_action) in enumerate(cursor.stages.items()):
+        for stage_name, stage_action in cursor.stages.items():
 
             stages_point = stages_point.then_route(
                 {lambda never: None: (stage_name, stage_action)}
             )
 
-        return stages_point.compile()
+        return stages_point.compile(**kwargs)
 
     @classmethod
     def start(cls):
@@ -339,16 +346,16 @@ class StagedGraph(_GraphBuilder, metaclass=StagedGraphMeta):
         Start a new sequential graph builder with the provided graph.
         If no graph is provided, a new StateGraph will be created.
         """
-        state_type = None
-        if hasattr(cls, "graph_state_type"):
+        state_schema = None
+        if hasattr(cls, "graph_state_schema"):
             # Try to determine the schema from generic arguments of the class
-            state_type = getattr(cls, "graph_state_type")
+            state_schema = getattr(cls, "graph_state_schema")
         else:
-            state_type = dict
+            state_schema = None
 
         # If no graph provided, create one with the state type
 
-        _graph = cls(graph_state_type=state_type)
+        _graph = cls(graph_state_schema=state_schema)
 
         return StagedGraphBuilderCursor(_graph)
 
@@ -433,10 +440,10 @@ class SequentialGraphBuilderCursor:
             self.pending_route = None
             self.last_node_key = res.last_node_key
 
-    def compile(self):
+    def compile(self, **kwargs):
         self._flush_pending(END)
         self.graph._then(self.last_node_key, END)
-        return self.graph.compile()
+        return self.graph.compile(**kwargs)
 
 
 class StagedGraphBuilderCursor:
@@ -459,5 +466,5 @@ class StagedGraphBuilderCursor:
         self.stages[key] = {condition: action}
         return self
 
-    def compile(self):
-        return self.graph._compile(self)
+    def compile(self, **kwargs):
+        return self.graph._compile(self, **kwargs)

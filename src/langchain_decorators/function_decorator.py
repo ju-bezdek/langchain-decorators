@@ -250,6 +250,7 @@ def build_func_schema(
     arguments_schema: Union[Type[BaseModel], Type[List[Any]], None] = None,
     func_description: str = None,
     schema_template_parameters: Dict[str, Any] = None,
+    as_pydantic_model: bool = False,
 ):
 
     if isinstance(format, str):
@@ -267,8 +268,16 @@ def build_func_schema(
             f"Invalid function name: {function_name} for {get_function_full_name(func)}. Only letters, numbers and underscores are allowed. The name must start with a letter or an underscore."
         )
 
-    func_name = function_name or func.__name__
+    func_name = (
+        function_name or getattr(func, "name", None) or getattr(func, "__name__", None)
+    )
     args_schema = None
+
+    description = (
+        parse_function_description_from_docstrings(func_docs)
+        if func_docs
+        else func_description
+    )
 
     if arguments_schema and isinstance(arguments_schema, Type):
         args_schema = arguments_schema.schema()
@@ -338,7 +347,9 @@ def build_func_schema(
                         if enum:
                             arg_model_field.field_info.extra["enum"] = enum
 
-        model = create_model(func_name, **arguments_fields)
+        model = create_model(func_name, **arguments_fields, __doc__=description)
+        if as_pydantic_model:
+            return model
         args_schema = model.model_json_schema()
 
     def pop_prop_title(schema):
@@ -356,12 +367,8 @@ def build_func_schema(
         for prop, prop_schema in args_schema["properties"].items()
     }
 
-    description = (
-        parse_function_description_from_docstrings(func_docs)
-        if func_docs
-        else func_description
-    )
-
+    if as_pydantic_model:
+        return model
     result_schema = {"name": func_name, "parameters": args_schema}
     if description:
         result_schema["description"] = description

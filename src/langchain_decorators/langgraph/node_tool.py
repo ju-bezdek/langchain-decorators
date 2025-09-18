@@ -8,6 +8,8 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Type,
+    Union,
+    Optional,
     get_type_hints,
     get_origin,
     get_args,
@@ -54,25 +56,25 @@ class NodeTool(StructuredTool):
     def maybe_ask_for_approval(self, input: dict) -> bool:
         if self.require_confirmation:
             is_approved = interrupt(
-                [
-                    HumanInterrupt(
-                        action_request=ActionRequest(
-                            action="approve_action",
-                            args={
-                                "action": f"Execute tool '{self.name}' with arguments {input.get('args')}"
-                            },
-                        ),
-                        config=HumanInterruptConfig(
-                            allow_ignore=True,
-                            allow_respond=True,
-                            allow_edit=False,
-                            allow_accept=True,
-                        ),
-                        description=f"Please approve the action to execute tool '{self.name}' with arguments {input.get('args')}",
-                    )
-                ]
+                HumanInterrupt(
+                    action_request=ActionRequest(
+                        action=self.name,
+                        args={
+                            k: v
+                            for k, v in (input.get("args") or {}).items()
+                            if k != "__self__"
+                        },
+                    ),
+                    config=HumanInterruptConfig(
+                        allow_ignore=False,
+                        allow_respond=True,
+                        allow_edit=False,
+                        allow_accept=True,
+                    ),
+                    description=f"Please approve the action to execute tool '{self.name}' with arguments {input.get('args')}",
+                )
             )
-            if not is_approved:
+            if not is_approved == True:
                 return Command(
                     update={
                         "messages": [
@@ -114,32 +116,34 @@ class NodeTool(StructuredTool):
 
         return result
 
-    def _run(self, *args, **kwargs):
+    def _to_args_and_kwargs(
+        self, tool_input: Union[str, dict], tool_call_id: Optional[str]
+    ) -> tuple[tuple, dict]:
         """
-        Run the tool with the given arguments.
-        This method is called by the base class to execute the tool.
+        Override native _parse_input to handle bound methods.
         """
-        _self = kwargs.pop(
+        _self = tool_input.pop(
             "__self__", None
         )  # Ensure __self__ is not passed to the function
+        args, kwargs = super()._to_args_and_kwargs(tool_input, tool_call_id)
         if _self is not None:
             args = (_self,) + args
-        return self.func(*args, **kwargs)
+        return args, kwargs
 
-    async def _arun(self, *args, **kwargs):
-        """
-        Run the tool with the given arguments.
-        This method is called by the base class to execute the tool.
-        """
-        _self = kwargs.pop(
-            "__self__", None
-        )  # Ensure __self__ is not passed to the function
-        if _self is not None:
-            args = (_self,) + args
-        if self.coroutine:
-            return await self.coroutine(*args, **kwargs)
-        else:
-            return self.func(*args, **kwargs)
+    # async def _arun(self, *args, **kwargs):
+    #     """
+    #     Run the tool with the given arguments.
+    #     This method is called by the base class to execute the tool.
+    #     """
+    #     _self = kwargs.pop(
+    #         "__self__", None
+    #     )  # Ensure __self__ is not passed to the function
+    #     if _self is not None:
+    #         args = (_self,) + args
+    #     if self.coroutine:
+    #         return await self.coroutine(*args, **kwargs)
+    #     else:
+    #         return self.func(*args, **kwargs)
 
 
 def node_tool(
@@ -180,14 +184,17 @@ def node_tool(
                 transitions = list(get_args(transitions_literal))
         if not func_info:
             func_info = build_func_schema(
-                func=func, function_name=name, func_description=description
+                func=func,
+                function_name=name,
+                func_description=description,
+                as_pydantic_model=True,
             )
 
         wrapped_tool = NodeTool(
             func=func,
-            name=func_info["name"],
-            description=func_info.get("description"),
-            args_schema=func_info["parameters"],
+            name=name or func_info.__name__,
+            description=description or func_info.__doc__ or "",
+            args_schema=func_info,
             require_confirmation=require_confirmation,
             bind_to_prompt_nodes=bind_to_prompt_nodes,
         )

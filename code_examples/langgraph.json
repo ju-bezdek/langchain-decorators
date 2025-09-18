@@ -1,0 +1,8 @@
+{
+  "dependencies": ["."],
+   "env": "./.env",  
+  "graphs": {
+    "graph": "code_examples.sample_staged_graph:graph"
+
+  }
+}

@@ -29,7 +29,7 @@ from langgraph.prebuilt.interrupt import (
 )
 
 
-def node_transition(after: str | list[str] | tuple[str]):
+def conditional_transition(after: str | list[str] | tuple[str]):
     """
     Decorator that marks a function as a node transition.
 
@@ -99,5 +99,3 @@ def get_conditional_transition_edges(func) -> dict[str, tuple[str]]:
             f"Function `{func.__name__}` is not a node transition or does not have transitions defined."
         )
     return res
-
-

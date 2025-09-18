@@ -99,7 +99,7 @@ class LLMDecoratorChain(Runnable):
     llm_selector_rule_key: Optional[str] = None
     allow_retries: bool = True
     format_instructions_parameter_key: str = "FORMAT_INSTRUCTIONS"
-
+    tags: list[str] = None
     return_type: Optional[Type] = None
 
     prompt_type: PromptTypeSettings = PromptTypes.UNDEFINED
@@ -124,12 +124,14 @@ class LLMDecoratorChain(Runnable):
         tools_provider: Optional[ToolsProvider] = None,
         return_type: Optional[Type] = None,
         default_config: RunnableConfig = None,
+        tags: list[str] = None,
         **kwargs,
     ) -> None:
         """Initialize LLMDecoratorChain with prompt and LLM."""
         self.name = name
         self.prompt = prompt
         self.llm = llm
+        self.tags = tags
         self.capture_stream = capture_stream
         self.expected_gen_tokens = expected_gen_tokens
         self.llm_selector = llm_selector
@@ -161,7 +163,8 @@ class LLMDecoratorChain(Runnable):
 
     def invoke(self, inputs: dict, config=None, **kwargs):
         """Execute the chain and return outputs"""
-        config = ensure_config(config or self.default_config)
+        config = merge_configs(ensure_config(config=config), self.default_config)
+        config["tags"] = self.tags
         print_log(
             log_object=f"> Entering {self.name} prompt decorator chain",
             log_level=self.prompt_type.log_level,
@@ -178,6 +181,7 @@ class LLMDecoratorChain(Runnable):
     async def ainvoke(self, inputs, config=None, **kwargs):
         """Call the chain with inputs."""
         config = merge_configs(ensure_config(config=config), self.default_config)
+        config["tags"] = self.tags
         print_log(
             log_object=f"> Entering {self.name} prompt decorator chain",
             log_level=self.prompt_type.log_level,
@@ -268,6 +272,7 @@ class LLMDecoratorChain(Runnable):
                 )
 
         llm: BaseChatModel | Runnable = self.select_llm(formatted_prompt, _inputs)
+
         if StreamingContext.get_context() and self.capture_stream is not False:
             kwargs["stream"] = True
             config["callbacks"] = (
@@ -279,6 +284,8 @@ class LLMDecoratorChain(Runnable):
                 config["callbacks"].add_handler(
                     StreamingContext.StreamingContextCallback()
                 )
+        else:
+            kwargs["stream"] = False
 
         if tools_provider:
             llm = self._bind_tools_to_llm(
@@ -316,6 +323,7 @@ class LLMDecoratorChain(Runnable):
         print_log(
             f"Prompt:\n{formatted_prompt.to_string()}", log_level, LogColors.DARK_GRAY
         )
+        llm.name = self.name
 
         return formatted_prompt, llm
 
@@ -367,6 +375,7 @@ class LLMDecoratorChain(Runnable):
                 )
         else:
             llm = self.llm
+
         return llm
 
     def _additional_llm_selector_args(self, inputs):

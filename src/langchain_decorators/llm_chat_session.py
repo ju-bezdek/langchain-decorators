@@ -203,11 +203,12 @@ class LlmChatSession:
         self.message_history.append(message)
         if isinstance(message, AIMessage):
             self.last_llm_response = message
-            if message.tool_calls:
+            if message.tool_calls and self.tools_provider:
                 self._last_response_tool_calls = []
                 from .llm_tool_use import ToolCall
 
                 for tool_call_dict in self.last_llm_response.tool_calls:
+
                     func = self.tools_provider.get_tool_by_name(
                         tool_call_dict["name"], raise_errors=False
                     )

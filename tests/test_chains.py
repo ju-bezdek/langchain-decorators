@@ -7,12 +7,12 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Literal, Optional, Callable
 
 from langchain_decorators import (
-    llm_prompt, 
+    llm_prompt,
     llm_function,
-    GlobalSettings, 
+    GlobalSettings,
     OutputWithFunctionCall,
     FollowupHandle,
-    ToolsProvider
+    ToolsProvider,
 )
 
 # Test with and without fallbacks
@@ -55,10 +55,11 @@ class TestChains:
 
     def test_tools_provider_functionality(self, setup_real_llm):
         """Test ToolsProvider class with real functions"""
+
         @llm_function
         def calculate(expression: str) -> str:
             """Calculate a mathematical expression
-            
+
             Args:
                 expression (str): Math expression like "2 + 3"
             """
@@ -72,7 +73,7 @@ class TestChains:
         @llm_function
         def format_text(text: str, style: str = "uppercase") -> str:
             """Format text in different styles
-            
+
             Args:
                 text (str): Text to format
                 style (str): Style (uppercase, lowercase, title)
@@ -104,6 +105,7 @@ class TestChains:
 
     def test_followup_handle_sync(self, setup_real_llm):
         """Test FollowupHandle functionality - sync"""
+
         @llm_prompt
         def tech_expert(question: str, followup_handle: FollowupHandle = None) -> str:
             """You are a tech expert. Answer this question concisely: {question}"""
@@ -126,13 +128,18 @@ class TestChains:
     @pytest.mark.asyncio
     async def test_followup_handle_async(self, setup_real_llm):
         """Test async FollowupHandle functionality"""
+
         @llm_prompt
-        async def async_assistant(question: str, followup_handle: FollowupHandle = None) -> str:
+        async def async_assistant(
+            question: str, followup_handle: FollowupHandle = None
+        ) -> str:
             """Answer this programming question: {question}"""
             pass
 
         handle = FollowupHandle()
-        result = await async_assistant(question="What is async/await?", followup_handle=handle)
+        result = await async_assistant(
+            question="What is async/await?", followup_handle=handle
+        )
 
         assert isinstance(result, str)
         assert "async" in result.lower() or "await" in result.lower()
@@ -149,7 +156,7 @@ class TestChains:
         @llm_function
         def search_docs(query: str, language: Literal["python", "javascript"]) -> str:
             """Search documentation for information
-            
+
             Args:
                 query (str): Search query
                 language (str): Programming language to search in (python, javascript)
@@ -161,8 +168,12 @@ class TestChains:
             }
             return docs.get(language, f"No documentation found for '{language}'")
 
-        @llm_prompt
-        def documentation_helper(question: str, functions: List[Callable], followup_handle: FollowupHandle = None) -> OutputWithFunctionCall:
+        @llm_prompt(tags=["documentation_helper"])
+        def documentation_helper(
+            question: str,
+            functions: List[Callable],
+            followup_handle: FollowupHandle = None,
+        ) -> OutputWithFunctionCall:
             """{question}
             Provide answer using documentation search.
             """
@@ -315,19 +326,19 @@ class TestChains:
         """Test conversational chain that maintains context - async"""
         conversation_history = []
 
-        @llm_prompt
+        @llm_prompt()
         async def conversational_assistant(
             user_message: str, context_history: List[str] = None
         ) -> str:
             """
             ```<prompt:system>
             You are a helpful assistant. Use the conversation history to provide contextual responses.
-            
+
             {? Previous conversation:
             {context_history}
             ?}
             ```
-            
+
             ```<prompt:user>
             {user_message}
             ```
@@ -339,7 +350,9 @@ class TestChains:
             user_message="I'm planning a trip to Japan",
             context_history=conversation_history,
         )
-        conversation_history.append(f"User: I'm planning a trip to Japan\nAssistant: {response1}")
+        conversation_history.append(
+            f"User: I'm planning a trip to Japan\nAssistant: {response1}"
+        )
 
         assert "japan" in response1.lower()
 
@@ -351,14 +364,29 @@ class TestChains:
 
         assert isinstance(response2, str)
         # Should provide Japan-specific advice due to context
-        assert any(month in response2.lower() for month in ["spring", "summer", "fall", "winter", "march", "april", "may"]) or "japan" in response2.lower()
+        assert (
+            any(
+                month in response2.lower()
+                for month in [
+                    "spring",
+                    "summer",
+                    "fall",
+                    "winter",
+                    "march",
+                    "april",
+                    "may",
+                ]
+            )
+            or "japan" in response2.lower()
+        )
 
     def test_multi_step_workflow_sync(self, setup_real_llm):
         """Test multi-step workflow with function chaining - sync"""
+
         @llm_function
         def analyze_text(text: str) -> str:
             """Analyze text for sentiment and topics
-            
+
             Args:
                 text (str): Text to analyze
             """
@@ -379,7 +407,7 @@ class TestChains:
         @llm_function
         def generate_summary(analysis: str, original_text: str) -> str:
             """Generate a summary based on analysis
-            
+
             Args:
                 analysis (str): Text analysis results
                 original_text (str): Original text
@@ -387,7 +415,9 @@ class TestChains:
             return f"Summary: Text analysis shows {analysis}. Original text: '{original_text[:50]}...'"
 
         @llm_prompt
-        def text_workflow_manager(text_input: str, functions: List[Callable]) -> OutputWithFunctionCall:
+        def text_workflow_manager(
+            text_input: str, functions: List[Callable]
+        ) -> OutputWithFunctionCall:
             """Manage text processing workflow for: {text_input}
 
             First analyze the text, then create a summary.
@@ -397,7 +427,7 @@ class TestChains:
         # Start workflow
         result = text_workflow_manager(
             text_input="This is an amazing product that exceeded my expectations!",
-            functions=[analyze_text, generate_summary]
+            functions=[analyze_text, generate_summary],
         )
 
         if result.is_function_call:
@@ -461,10 +491,11 @@ class TestChains:
 
     def test_dynamic_function_schemas(self, setup_real_llm):
         """Test dynamic function schema generation with context"""
+
         @llm_function(dynamic_schema=True)
         def search_content(query: str) -> str:
             """Search for {content_type} about {topic}
-            
+
             Args:
                 query (str): Search query for {search_domain}
             """
@@ -472,9 +503,9 @@ class TestChains:
 
         # Test schema generation with dynamic context
         context = {
-            "content_type": "tutorials", 
+            "content_type": "tutorials",
             "topic": "machine learning",
-            "search_domain": "educational resources"
+            "search_domain": "educational resources",
         }
 
         schema = search_content.get_function_schema(search_content, context)

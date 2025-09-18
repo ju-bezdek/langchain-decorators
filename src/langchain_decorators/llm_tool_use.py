@@ -55,7 +55,8 @@ class ToolsProvider:
         self.tools.append(tool)
         self.aliases.append(alias)
         if isinstance(tool, BaseTool):
-            self.tool_schemas.append(format_tool_to_openai_function(tool))
+            # self.tool_schemas.append(format_tool_to_openai_function(tool))
+            self.tool_schemas.append(tool)
             f_name = alias or tool.name
         elif callable(tool) and hasattr(tool, "get_function_schema"):
             if hasattr(tool, "function_name"):
@@ -97,7 +98,9 @@ class ToolsProvider:
                 if _index is not None and i != _index:
                     continue
 
-                if callable(f_schema_builder):
+                if callable(f_schema_builder) and not isinstance(
+                    f_schema_builder, BaseTool
+                ):
                     _f_schema = f_schema_builder(inputs)
                 else:
                     _f_schema = f_schema_builder
@@ -146,15 +149,15 @@ T = TypeVar("T")
 
 
 class OutputWithFunctionCall(BaseModel, Generic[T]):
-    output_text:str
-    output_message:AIMessage
-    output:T
-    tool_call_id:Union[str,None]= None
-    function_name:Union[str,None] =None
-    function_arguments:Union[Dict[str,Any],str,None]
-    function:Union[Callable,None] = None
-    function_async:Union[Callable,None] = None
-    result: Union[Any,None] = None
+    output_text: str
+    output_message: AIMessage
+    output: T
+    tool_call_id: Union[str, None] = None
+    function_name: Union[str, None] = None
+    function_arguments: Union[Dict[str, Any], str, None]
+    function: Union[Callable, None] = None
+    function_async: Union[Callable, None] = None
+    result: Union[Any, None] = None
     _result_generated = PrivateAttr(False)
 
     @property
@@ -169,7 +172,9 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
     def support_sync(self):
         return bool(self.function)
 
-    async def execute_async(self, augment_args:Callable[[Dict[str,Any]],Dict[str,Any]]=None):
+    async def execute_async(
+        self, augment_args: Callable[[Dict[str, Any]], Dict[str, Any]] = None
+    ):
         """Executes the function asynchronously."""
         if not (self.function or self.function_async):
             raise ValueError("No function to execute")
@@ -184,19 +189,19 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
                     call_kwargs = augment_args(**self.function_arguments)
                 else:
                     call_kwargs = self.function_arguments or {}
-                result=await self.function.ainvoke(call_kwargs)
+                result = await self.function.ainvoke(call_kwargs)
             else:
                 call_args, call_kwargs = self._get_final_func_args(augment_args)
-                result= self.function(*call_args, **call_kwargs)
+                result = self.function(*call_args, **call_kwargs)
                 if asyncio.iscoroutine(result):
                     result = await result
         self.result = result
-        self._result_generated=True
+        self._result_generated = True
         return result
 
-    def _get_final_func_args(self, augment_args:Callable) -> Dict[str, Any]:
+    def _get_final_func_args(self, augment_args: Callable) -> Dict[str, Any]:
         call_kwargs = self.function_arguments or {}
-        call_args=[]
+        call_args = []
         for k in list(call_kwargs):
             if k.startswith("__arg"):
                 # skip private attributes
@@ -205,8 +210,8 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
             call_kwargs = augment_args(**call_kwargs)
         return call_args, call_kwargs
 
-    def execute(self, augment_args:Callable[[Dict[str,Any]],Dict[str,Any]]=None):
-        """ Executes the function synchronously. 
+    def execute(self, augment_args: Callable[[Dict[str, Any]], Dict[str, Any]] = None):
+        """Executes the function synchronously.
         If the function is async, it will be executed in a event loop.
         """
         if not (self.function or self.function_async):
@@ -220,10 +225,10 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
                     call_kwargs = augment_args(**self.function_arguments)
                 else:
                     call_kwargs = self.function_arguments or {}
-                result=self.function.invoke(call_kwargs)
+                result = self.function.invoke(call_kwargs)
             else:
                 call_args, call_kwargs = self._get_final_func_args(augment_args)
-                result= self.function(*call_args, **call_kwargs)
+                result = self.function(*call_args, **call_kwargs)
 
         if asyncio.iscoroutine(result):
             try:
@@ -231,19 +236,25 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
             except RuntimeError:
                 current_loop = None
             if current_loop:
-                raise RuntimeError("Cannot execute async function synchronously. Please use execute_async() instead.",)
+                raise RuntimeError(
+                    "Cannot execute async function synchronously. Please use execute_async() instead.",
+                )
             else:
-                logging.warning("Executing async function synchronously. This is not recommended. Consider using execute_async() instead.")
-                result= asyncio.run(self.function_async(**self.function_arguments))
+                logging.warning(
+                    "Executing async function synchronously. This is not recommended. Consider using execute_async() instead."
+                )
+                result = asyncio.run(self.function_async(**self.function_arguments))
         self.result = result
-        self._result_generated=True
+        self._result_generated = True
         return result
 
     @property
     def function_call_message(self):
-        """ Returns the function call message"""
+        """Returns the function call message"""
         if not self.is_function_call:
-            raise ValueError("Output was not a function call. You can test this with is_function_call property")
+            raise ValueError(
+                "Output was not a function call. You can test this with is_function_call property"
+            )
         if self.output_message:
             return self.output_message
 
@@ -251,12 +262,14 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
         """
         Deprecated: Use function_output_to_message instead
         """
-        logging.warning("to_function_message is deprecated, use function_output_to_message instead")
+        logging.warning(
+            "to_function_message is deprecated, use function_output_to_message instead"
+        )
         return self.function_output_to_message(function_output=result)
 
     def function_output_to_message(self, function_output=None):
         """
-        Converts the result of the functional call to a FunctionMessage... 
+        Converts the result of the functional call to a FunctionMessage...
         you can override the result collected via execute with your own by providing function_output
 
         Args:
@@ -268,14 +281,20 @@ class OutputWithFunctionCall(BaseModel, Generic[T]):
                     self.result = self.execute()
                 except RuntimeError as e:
                     if "Cannot execute async function synchronously." in str(e):
-                        raise RuntimeError("Cannot execute async function synchronously. Please use await execute_async() to generate the output of the function first") from e
+                        raise RuntimeError(
+                            "Cannot execute async function synchronously. Please use await execute_async() to generate the output of the function first"
+                        ) from e
             function_output = self.result
-        if isinstance(function_output,BaseModel):
+        if isinstance(function_output, BaseModel):
             function_output = function_output.json()
-        elif not isinstance(function_output,str):
+        elif not isinstance(function_output, str):
             function_output = repr(function_output)
 
-        return ToolMessage(tool_call_id=self.tool_call_id, name=self.function_name, content=function_output)
+        return ToolMessage(
+            tool_call_id=self.tool_call_id,
+            name=self.function_name,
+            content=function_output,
+        )
 
 
 class ToolCall(BaseModel):
@@ -329,17 +348,17 @@ class ToolCall(BaseModel):
         """Calls the function with the provided arguments."""
         if not self.function:
             raise ValueError("No function to execute")
-        if isinstance(self.function,BaseTool):
+        if isinstance(self.function, BaseTool):
             return self.function.invoke(kwargs)
         else:
-            args=[]
+            args = []
             for key in kwargs:
                 if key.startswith("__arg"):
                     args.append(kwargs.pop(key))
 
             call_kwargs = self.args or {}
             call_kwargs.update(kwargs)
-            return self.function(*args,**call_kwargs)
+            return self.function(*args, **call_kwargs)
 
     def _serialize_result(
         self, tool_results: Union[BaseModel, dict, str, Exception, list, dict]

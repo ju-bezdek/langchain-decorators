@@ -9,7 +9,7 @@ except ImportError:
 if LANGGRAPH_INSTALLED:
     from .nodes_base import LlmNodeBase
     from .node_decorator import node
-    from .node_transition import node_transition
+    from .transitions import conditional_transition
     from .node_tool import node_tool
     from .graphs import (
         SequentialGraph,

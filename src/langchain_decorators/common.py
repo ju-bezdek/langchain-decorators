@@ -444,6 +444,36 @@ class PromptTypes:
         llm=init_chat_model("openai:gpt-5") if OPENAI_INSTALLED else None,
     )
 
+    DEEP_REASONING: PromptTypeSettings = PromptTypeSettings(
+        color=LogColors.BLACK_AND_WHITE,
+        log_level=logging.DEBUG,
+        llm=(
+            init_chat_model("openai:gpt-5", reasoning={"effort": "high"})
+            if OPENAI_INSTALLED
+            else None
+        ),
+    )
+
+    REASONING: PromptTypeSettings = PromptTypeSettings(
+        color=LogColors.BLACK_AND_WHITE,
+        log_level=logging.DEBUG,
+        llm=(
+            init_chat_model("openai:gpt-5", reasoning={"effort": "medium"})
+            if OPENAI_INSTALLED
+            else None
+        ),
+    )
+
+    LIGHT_REASONING: PromptTypeSettings = PromptTypeSettings(
+        color=LogColors.BLACK_AND_WHITE,
+        log_level=logging.DEBUG,
+        llm=(
+            init_chat_model("openai:gpt-5", reasoning={"effort": "minimal"})
+            if OPENAI_INSTALLED
+            else None
+        ),
+    )
+
     GPT4o: PromptTypeSettings = PromptTypeSettings(
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,

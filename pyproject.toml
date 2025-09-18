@@ -1,12 +1,12 @@
 [project]
 name = "langchain-decorators"
-dynamic = ["version"]
+# dynamic = ["version"]
 description = "syntactic sugar for langchain"
 dependencies = ["langchain-core", "typing-inspect"]
 authors = [
     {name = "ju-bezdek", email = "juraj.bezdek@gmail.com"}
 ]
-version = "1.0.0rc4"
+version = "1.0.0"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -48,4 +48,5 @@ furo = "^2025.7.19"
 
 [tool.poetry.group.dev.dependencies]
 langgraph = "^0.6.5"
+langgraph-cli = {extras = ["inmem"], version = "^0.4.2"}
 

@@ -351,7 +351,7 @@ class PromptDecoratorTemplate(StringPromptTemplate):
         if output_parser == "auto":
             if return_type == str or return_type == None:
                 output_parser = "str"
-            elif return_type == dict:
+            elif issubclass(return_type, dict):
                 output_parser = "json"
             elif return_type == list:
                 return_list = True
@@ -389,6 +389,8 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                 output_parser = None
             elif output_parser == "json":
                 output_parser = JsonOutputParser()
+                if return_list:
+                    return_type = PydanticListTypeWrapper[return_type]
             elif output_parser == "boolean":
                 output_parser = BooleanOutputParser()
             elif output_parser == "markdown":
@@ -433,6 +435,10 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                         )
                 else:
                     output_parser = None
+            elif isinstance(output_parser, Type) and issubclass(
+                output_parser, BaseOutputParser
+            ):
+                pass
             else:
                 raise Exception(f"Unsupported output parser {output_parser}")
 
