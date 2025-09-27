@@ -349,7 +349,13 @@ class ToolCall(BaseModel):
         if not self.function:
             raise ValueError("No function to execute")
         if isinstance(self.function, BaseTool):
-            return self.function.invoke(kwargs)
+            # Merge stored args with any explicit kwargs provided at call time
+            call_kwargs = {}
+            if isinstance(self.args, dict):
+                call_kwargs.update(self.args)
+            if kwargs:
+                call_kwargs.update(kwargs)
+            return self.function.invoke(call_kwargs)
         else:
             args = []
             for key in kwargs:

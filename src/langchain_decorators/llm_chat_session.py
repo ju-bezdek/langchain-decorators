@@ -6,6 +6,7 @@ from langchain.tools.base import BaseTool
 
 
 from langchain.schema.messages import ToolMessage, AIMessage, HumanMessage, BaseMessage
+from langchain.prompts.chat import MessagesPlaceholder
 from openai import BaseModel
 
 if TYPE_CHECKING:
@@ -24,6 +25,8 @@ class LlmChatSession:
         on_stream_token: Optional[
             Callable[[str], Union[None, Coroutine[None, None, None]]]
         ] = None,
+        context: dict = None,
+        _messages_memory_arg_name: str = "messages",
     ):
         """Initialize the LlmChatSession with a list of tools or a ToolsProvider."""
         from .llm_tool_use import ToolsProvider
@@ -34,26 +37,37 @@ class LlmChatSession:
             self.tools_provider = ToolsProvider(tools)
         else:
             self.tools_provider = None
+
+        self.messages_memory_arg_name = _messages_memory_arg_name
         self.parent_context: LlmChatSession = self._context.get()
-        if (
-            not message_history
-            and self.parent_context
-            and self._copy_messages_from_parent_context
-        ):
+        self.copy_parent_context = copy_parent_context
+        if not message_history and self.parent_context and self.copy_parent_context:
             self.message_history = list(self.parent_context.message_history)
+            self.context = {
+                **(context or {}),
+                **(self.parent_context.context),
+            }
         else:
-            self.message_history = message_history or []
+            self.message_history: list[BaseMessage] = (
+                message_history if message_history is not None else []
+            )
+            self.context = context or {}
 
         if self.parent_context and self.parent_context.tools_provider and not tools:
             self.tools_provider = self.parent_context.tools_provider
 
-        self._copy_messages_from_parent_context = copy_parent_context
         self.last_llm_response: AIMessage = None
         self._last_response_tool_calls: Optional[list["ToolCall"]] = None
         self.suppressed_output_parser = suppress_output_parser
         self.suppressed_structured_output = False
         self.on_stream_token = on_stream_token
         self._streaming_context = None
+        self._hash_set = set(((m.type, m.content) for m in self.message_history))
+
+    def get_prompt_context(self) -> dict:
+        """Get the current context of the session."""
+        messages = self.message_history
+        return {**self.context, self.messages_memory_arg_name: messages}
 
     def with_stream(
         self,
@@ -189,6 +203,7 @@ class LlmChatSession:
         self,
         message: Union[BaseMessage, str],
         message_type: Literal["ai", "user", "tool"] = None,
+        ignore_duplicates: bool = False,
     ):
         """Add a message to the session."""
         if isinstance(message, str):
@@ -200,6 +215,9 @@ class LlmChatSession:
                 message = ToolMessage(content=message)
             else:
                 raise ValueError("Invalid message type. Use 'ai', 'human', or 'tool'.")
+        if (message.type, message.content) in self._hash_set and ignore_duplicates:
+            return
+        self._hash_set.add((message.type, message.content))
         self.message_history.append(message)
         if isinstance(message, AIMessage):
             self.last_llm_response = message

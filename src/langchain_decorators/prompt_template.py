@@ -3,6 +3,11 @@ import re
 import inspect
 from abc import ABC, abstractmethod
 from string import Formatter
+from langchain_core.messages import BaseMessage
+from langchain_core.prompts import BaseChatPromptTemplate
+from langchain_core.prompts.message import (
+    BaseMessagePromptTemplate,
+)
 
 from typing import (
     Any,
@@ -35,6 +40,7 @@ from langchain.schema import (
     BaseMemory,
     BaseChatMessageHistory,
 )
+from .llm_chat_session import LlmChatSession
 
 from .schema import MessageAttachment, OutputWithFunctionCall, PydanticListTypeWrapper
 from .common import (
@@ -344,7 +350,7 @@ class PromptDecoratorTemplate(StringPromptTemplate):
         template_string = get_function_docs(func)
         template_name = template_name or get_function_full_name(func)
         return_type = get_func_return_type(func)
-
+        original_kwargs = original_kwargs or {}
         if original_kwargs.get("output_parser"):
             output_parser = original_kwargs.pop("output_parser")
         return_list = False
@@ -522,6 +528,10 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                     if not kwargs.get(msg.variable_name):
                         kwargs[msg.variable_name] = []
 
+                    # Allow pass message to placeholder as a single message instead of a list
+                    if not isinstance(kwargs.get(msg.variable_name), list):
+                        kwargs[msg.variable_name] = [kwargs.get(msg.variable_name)]
+
         for key, value in list(kwargs.items()):
             if isinstance(value, BaseMemory):
                 memory: BaseMemory = kwargs.pop(key)
@@ -530,18 +540,58 @@ class PromptDecoratorTemplate(StringPromptTemplate):
             elif isinstance(value, BaseChatMessageHistory):
                 kwargs[key] = value.messages
 
-        formatted = final_template.format_prompt(**kwargs)
-        if isinstance(formatted, ChatPromptValue):
-            for msg in list(formatted.messages):
-                if (
-                    isinstance(msg.content, str)
-                    and (not msg.content or not msg.content.strip())
-                    and not msg.additional_kwargs
-                ):
-                    formatted.messages.remove(msg)
+        if isinstance(final_template, ChatPromptTemplate):
+            formatted = self._format_chat_messages(final_template.messages, kwargs)
+        else:
+            # default - string prompt
+            formatted = final_template.format_prompt(**kwargs)
+            if LlmChatSession.get_current_session():
+                LlmChatSession.get_current_session().remember_new_messages()
+
         self.on_prompt_formatted(formatted.to_string())
 
         return formatted
+
+    def _format_chat_messages(self, messages, kwargs: Any) -> list[BaseMessage]:
+        """
+        Format the chat template into a list of finalized messages.
+        ... it should be consistent with ChatPromptTemplate.format_messages
+        adds some extra handling for LlmChatSession and MessagesPlaceholder
+        """
+
+        result = []
+        current_session = LlmChatSession.get_current_session()
+        found_session_placeholder: LlmChatSession = None
+        for message_template in messages:
+            if isinstance(message_template, BaseMessage):
+                result.append(message_template)
+            elif isinstance(
+                message_template, (BaseMessagePromptTemplate, BaseChatPromptTemplate)
+            ):
+                if (
+                    isinstance(message_template, MessagesPlaceholder)
+                    and current_session
+                    and message_template.input_variables
+                    and message_template.input_variables[0]
+                    == current_session.messages_memory_arg_name
+                ):
+                    found_session_placeholder = current_session
+                message = message_template.format_messages(**kwargs)
+
+                for msg in message:
+                    if (
+                        not msg.content or not msg.content.strip()
+                    ) and not msg.additional_kwargs:
+                        continue
+                    result.append(msg)
+                    if found_session_placeholder:
+                        found_session_placeholder.add_message(msg)
+
+            else:
+                msg = f"Unexpected input: {message_template}"
+                raise ValueError(msg)  # noqa: TRY004
+
+        return ChatPromptValue(messages=result)
 
     def format(self, **kwargs: Any) -> str:
         formatted = self.get_final_template(**kwargs).format(**kwargs)

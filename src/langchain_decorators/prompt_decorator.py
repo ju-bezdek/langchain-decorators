@@ -8,6 +8,7 @@ from langchain.llms.base import BaseLanguageModel
 from langchain.schema import BaseOutputParser, AIMessage
 from langchain.tools.base import BaseTool
 from langchain_core.runnables.config import RunnableConfig
+from .llm_chat_session import LlmChatSession
 from .chains import LLMDecoratorChain, ToolsProvider
 from .common import *
 from .function_decorator import get_dynamic_function_template_args, is_dynamic_llm_func
@@ -417,6 +418,14 @@ def llm_prompt(
                     return get_value_ext(value, subpath, default)
                 else:
                     return value
+
+            if missing_inputs:
+                session = LlmChatSession.get_current_session()
+                if session:
+                    for k, v in session.get_prompt_context().items():
+                        if k in missing_inputs:
+                            kwargs[k] = v
+                            missing_inputs.remove(k)
 
             if missing_inputs:
                 missing_value = {}

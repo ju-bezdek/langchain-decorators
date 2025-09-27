@@ -18,6 +18,7 @@ from typing import (
 )
 from langchain.tools.convert_to_openai import format_tool_to_openai_function
 
+from .llm_chat_session import LlmChatSession
 import pydantic
 
 from pydantic import BaseModel, create_model
@@ -255,10 +256,15 @@ def build_func_schema(
 
     if isinstance(format, str):
         format = DocstringsFormat(format)
-
+    is_dynamic = getattr(func, "is_dynamic", False)
+    if is_dynamic and (session := LlmChatSession.get_current_session()):
+        schema_template_parameters = {
+            **(schema_template_parameters or {}),
+            **(session.get_prompt_context() or {}),
+        }
     if not (func_description and arguments_schema):
         func_docs = get_function_docs(func)
-        if schema_template_parameters:
+        if schema_template_parameters and is_dynamic:
             func_docs = format_str_extra(func_docs, **schema_template_parameters)
     else:
         func_docs = None
@@ -345,7 +351,7 @@ def build_func_schema(
                             arg_docs["type"], description=arg_docs["description"]
                         )
                         if enum:
-                            arg_model_field.field_info.extra["enum"] = enum
+                            arg_model_field.json_schema_extra["enum"] = enum
 
         model = create_model(func_name, **arguments_fields, __doc__=description)
         if as_pydantic_model:
@@ -544,9 +550,30 @@ def find_and_parse_params_from_docstrings(
 
 
 def parse_enum_from_docstring_param(type: str, description) -> str:
-    enum_pattern = r"\[\s*(?P<value>[\"|'][\w|_|-| ]+[\"|']\s*(\||\]))+"
-    enum_part_match = re.search(enum_pattern, type + " / " + description)
-    if not enum_part_match:
-        return None
-    enum_strings = enum_part_match.group(0).strip("[]").split("|")
-    return [enum.strip(" \"'") for enum in enum_strings]
+    def match(input: str):
+        brackets_pattern = f"\[(.*?)\]"
+        enums_candidates = re.search(brackets_pattern, input)
+        if not enums_candidates:
+            return None
+        for candidate in enums_candidates.groups():
+            for quote_type in ['"', "'"]:
+                if candidate.startswith(quote_type) and candidate.endswith(quote_type):
+                    for sep in ["|", ","]:
+                        if sep in candidate:
+                            split = candidate.split(sep)
+                            if all(
+                                s.strip().startswith(quote_type)
+                                and s.strip().endswith(quote_type)
+                                for s in split
+                            ):
+                                return [
+                                    e.strip().strip(quote_type)
+                                    for e in candidate.split(sep)
+                                ]
+
+    matched_in_type = match(type) if type else None
+    if matched_in_type:
+        return matched_in_type
+    matched_in_description = match(description) if description else None
+    if matched_in_description:
+        return matched_in_description

@@ -448,7 +448,9 @@ class PromptTypes:
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
         llm=(
-            init_chat_model("openai:gpt-5", reasoning={"effort": "high"})
+            init_chat_model(
+                "openai:gpt-5", model_kwargs={"reasoning": {"effort": "high"}}
+            )
             if OPENAI_INSTALLED
             else None
         ),
@@ -458,7 +460,9 @@ class PromptTypes:
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
         llm=(
-            init_chat_model("openai:gpt-5", reasoning={"effort": "medium"})
+            init_chat_model(
+                "openai:gpt-5", model_kwargs={"reasoning": {"effort": "medium"}}
+            )
             if OPENAI_INSTALLED
             else None
         ),
@@ -468,7 +472,9 @@ class PromptTypes:
         color=LogColors.BLACK_AND_WHITE,
         log_level=logging.DEBUG,
         llm=(
-            init_chat_model("openai:gpt-5", reasoning={"effort": "minimal"})
+            init_chat_model(
+                "openai:gpt-5", model_kwargs={"reasoning": {"effort": "minimal"}}
+            )
             if OPENAI_INSTALLED
             else None
         ),

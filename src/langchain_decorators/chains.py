@@ -258,11 +258,9 @@ class LLMDecoratorChain(Runnable):
                     for template in self.prompt.prompt_template_drafts
                     if template.role == "placeholder"
                 ):
-                    # add messages from session to the prompt, if there is no placeholder
-                    formatted_prompt.messages = [
-                        *formatted_prompt.messages,
-                        *session.message_history,
-                    ]
+                    logging.warning(
+                        "Message placeholder found in prompt template drafts, but there is an active LlmChatSession"
+                    )
             elif isinstance(formatted_prompt, StringPromptValue):
                 formatted_prompt = ChatPromptValue(
                     messages=[
