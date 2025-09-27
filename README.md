@@ -1,16 +1,16 @@
 # LangChain Decorators ✨
 
-LangChain Decorators is a lightweight layer on top of LangChain that provides syntactic sugar 🍭 for writing custom prompts and chains.
+LangChain Decorators is a lightweight layer built on top of LangChain that provides syntactic sugar 🍭 for writing custom prompts and chains.
 
-> Note: This is an unofficial add-on to the LangChain library. It's not trying to compete—just to make using it easier. Lots of ideas here are opinionated.
+> Note: This is an unofficial add-on to the LangChain library. It is not trying to compete—just to make using it easier. Many ideas here are opinionated.
 
-Here is a simple example written with LangChain Decorators ✨
+Here is a simple example using LangChain Decorators ✨:
 
 ```python
 @llm_prompt
 def write_me_short_post(topic: str, platform: str = "twitter", audience: str = "developers") -> str:
     """
-    Write me a short header for my post about {topic} for the {platform} platform.
+    Write a short header for my post about {topic} for the {platform} platform.
     It should be for a {audience} audience.
     (Max 15 words)
     """
@@ -23,9 +23,9 @@ write_me_short_post(topic="starwars", platform="reddit")
 ```
 
 Main principles and benefits:
-- A more Pythonic way of writing prompts
-- Write multiline prompts that don't break your code flow with indentation
-- Leverage IDE support for hinting, type checking, and doc popups to quickly see prompts and parameters
+- A more Pythonic way to write prompts
+- Write multi-line prompts without breaking your code’s indentation
+- Leverage IDE support for hints, type checking, and doc popups to quickly see prompts and parameters
 - Keep the power of the 🦜🔗 LangChain ecosystem
 - Add support for optional parameters
 - Easily share parameters between prompts by binding them to a class
@@ -50,9 +50,9 @@ Main principles and benefits:
 
 [Simplified streaming](#simplified-streaming)
 
-[More complex structures](#more-complex-structures)
+[Structured output](#structured-output)
 
-[Binding the prompt to an object](#binding-the-prompt-to-an-object)
+[Binding the prompt to an object](#prompts-as-object-methods)
 
 [Defining custom settings](#defining-custom-settings)
 
@@ -80,15 +80,15 @@ Define a prompt by creating a function with arguments as inputs and the function
 @llm_prompt
 def write_me_short_post(topic: str, platform: str = "twitter", audience: str = "developers"):
     """
-    Write me a short header for my post about {topic} for the {platform} platform.
+    Write a short header for my post about {topic} for the {platform} platform.
     It should be for a {audience} audience.
     (Max 15 words)
     """
 ```
 
-This is the default way to declare a prompt, and it’s translated into a chat with a single user message.
+This default declaration is translated into a chat with a single user message.
 
-If you want to declare a prompt with multiple messages (which is common), you can declare multiple messages as special code blocks inside the function docstring:
+If you want to define a prompt with multiple messages (common for chat models), add special code blocks inside the function docstring:
 
 ```python
 @llm_prompt
@@ -98,7 +98,7 @@ def write_me_short_post(topic: str, platform: str = "twitter", audience: str = "
     You are a social media manager.
     ```
     ```<prompt:user>
-    Write me a short header for my post about {topic} for the {platform} platform.
+    Write a short header for my post about {topic} for the {platform} platform.
     It should be for a {audience} audience.
     (Max 15 words)
     ```
@@ -108,7 +108,7 @@ def write_me_short_post(topic: str, platform: str = "twitter", audience: str = "
     """
 ```
 
-The pattern is a series of consecutive code blocks with a "language" tag in this format: `<prompt:[message-role]>`.
+The pattern is a series of consecutive code blocks with a “language” tag in this format: `<prompt:[message-role]>`.
 
 ### Documenting your prompt
 
@@ -118,16 +118,16 @@ You can specify which part of your docstring is the prompt by using a code block
 @llm_prompt
 def write_me_short_post(topic: str, platform: str = "twitter", audience: str = "developers"):
     """
-    Here is a good way to write a prompt as part of a function docstring, with additional documentation for devs.
+    Here is a good way to write a prompt as part of a function docstring, with additional documentation for developers.
 
     It needs to be a code block marked with `<prompt>`.
     ```<prompt:user>
-    Write me a short header for my post about {topic} for the {platform} platform.
+    Write a short header for my post about {topic} for the {platform} platform.
     It should be for a {audience} audience.
     (Max 15 words)
     ```
 
-    Only the code block above will be used as a prompt; the rest of the docstring will be used as documentation for developers.
+    Only the code block above will be used as a prompt; the rest of the docstring is documentation for developers.
     It also has a nice benefit in IDEs (like VS Code), which will display the prompt properly (without trying to parse it as Markdown).
     """
     return
@@ -135,7 +135,7 @@ def write_me_short_post(topic: str, platform: str = "twitter", audience: str = "
 
 ### Chat messages in prompt
 
-For chat models it’s useful to define the prompt as a set of message templates. Here’s how:
+For chat models, it’s useful to define the prompt as a set of message templates. Here’s how:
 
 ```python
 @llm_prompt
@@ -179,7 +179,7 @@ The roles here are the model’s native roles (assistant, user, system for ChatG
 ## Optional sections
 
 - Define a section of your prompt that should be optional.
-- If any referenced input in the section is missing or empty (None or ""), the whole section won’t be rendered.
+- If any referenced input in the section is missing or empty (None or ""), the whole section will not be rendered.
 
 Syntax:
 
@@ -192,7 +192,7 @@ def prompt_with_optional_partials():
     {? anything inside this block will be rendered only if all referenced {value}s
        are not empty (None | "") ?}
 
-    You can also place it in-line:
+    You can also place it inline:
     this too will be rendered{?, but
         this block will be rendered only if {this_value} and {that_value}
         are not empty ?}!
@@ -202,7 +202,7 @@ def prompt_with_optional_partials():
 ## Output parsers
 
 - The llm_prompt decorator tries to detect the best output parser based on the return type (if not set, it returns the raw string).
-- list, dict, and pydantic outputs are supported natively (automatically).
+- list, dict, and Pydantic model outputs are supported natively.
 
 ```python
 # this example should run as-is
@@ -219,7 +219,7 @@ write_name_suggestions(company_business="sells cookies", count=5)
 
 ## Chat sessions / threads
 
-For agentic workflows, you often need to keep track of messages in a single session/thread. Wrap calls in LlmChatSession:
+For agent-style workflows, you often need to keep track of messages in a single session/thread. Wrap calls in LlmChatSession:
 
 ```python
 from langchain_decorators import llm_prompt, LlmChatSession
@@ -246,11 +246,11 @@ with LlmChatSession() as session:
 
 ## Tool calling
 
-Implementing tool calling with LangChain can be a bit of a hassle: you need to manage chat history, collect tool response messages, and add them back to history.
+Implementing tool calling with LangChain can be a hassle: you need to manage chat history, collect tool response messages, and add them back to history.
 
 Decorators offer a simplified variant that manages this for you.
 
-You can use either the native LangChain `@tool` decorator or `@llm_function`, which offers a few quirks like handling bound methods, allowing dynamic tool schema generation (especially useful to pass in dynamic argument domain values), etc.
+You can use either the native LangChain `@tool` decorator or `@llm_function`, which adds conveniences such as handling bound methods and allowing dynamic tool schema generation (especially useful for passing dynamic argument domain values).
 
 ```python
 import datetime
@@ -274,7 +274,7 @@ class Agent(BaseModel):
     def main_prompt(self, user_input: str):
         """
         ```<prompt:system>
-        You are a friendly but shy assistant. Try to reply with the least number of words possible.
+        You are a friendly but shy assistant. Try to reply with the fewest words possible.
 
         Context:
         customer name is {customer_name}
@@ -289,7 +289,7 @@ class Agent(BaseModel):
         """
 
     def start(self):
-        with LlmChatSession(tools=[self.express_emotion]):  # add extra tools like `langchain_tool` if needed
+        with LlmChatSession(tools=[self.express_emotion]):  # add additional tools like `langchain_tool` if needed
             while True:
                 print(self.main_prompt(user_input=input("Enter your message: ")))
                 # Automatically call tools and add tool responses to history:
@@ -335,7 +335,7 @@ Info: this works by parsing any list of values ["val1", "val2"]. You can also us
 
 ## Simplified streaming
 
-If you want to leverage streaming:
+To use streaming:
 
 - Define the prompt as an async function.
 - Turn on streaming in the decorator (or via a PromptType).
@@ -348,17 +348,17 @@ This lets you mark which prompts should be streamed without wiring LLMs and call
 
 from langchain_decorators import StreamingContext, llm_prompt
 
-# Mark the prompt for streaming (only async functions can be streamed)
+# Mark the prompt for streaming (only async functions support streaming)
 @llm_prompt(capture_stream=True)
 async def write_me_short_post(topic: str, platform: str = "twitter", audience: str = "developers"):
     """
-    Write me a short header for my post about {topic} for the {platform} platform.
+    Write a short header for my post about {topic} for the {platform} platform.
     It should be for a {audience} audience.
     (Max 15 words)
     """
     pass
 
-# Simple function to demonstrate streaming; replace with websockets in real apps
+# Simple function to demonstrate streaming; replace with websockets in a real app
 tokens = []
 def capture_stream_func(new_token: str):
     tokens.append(new_token)
@@ -373,9 +373,9 @@ async def run():
     print(result)
 ```
 
-## More complex structures
+## Structured output
 
-For dict/pydantic outputs you need formatting instructions. You can let the output parser generate instructions based on a pydantic model.
+To get structured output, annotate your prompt with a return type:
 
 ```python
 from langchain_decorators import llm_prompt
@@ -402,7 +402,11 @@ print("Company headline:", company.headline)
 print("Company employees:", company.employees)
 ```
 
-## Binding the prompt to an object
+## Prompts as object methods
+
+Using prompts bound to a class as methods brings several advantages:
+- cleaner code organization
+- access to object fields/properties as prompt arguments
 
 ```python
 from pydantic import BaseModel
@@ -438,11 +442,46 @@ personality = AssistantPersonality(assistant_name="John", assistant_role="a pira
 print(personality.introduce_your_self())
 ```
 
+## Custom prompt input formatting
+
+We often need to format or preprocess some prompt inputs. While you can prepare this before calling your prompt, it can be tedious to repeat the same preprocessing everywhere. There are two main ways to preprocess inputs more elegantly:
+
+a) Using nested functions
+```python
+def my_func(input1:list, other_input:str):
+    @llm_prompt
+    def my_func_prompt(input1_str:str, other_input):
+       """
+       Do something with {input1_str} and {other_input}
+       """
+
+    my_func_prompt(input1_str=",".join(input1), other_input=other_input)
+```
+
+b) Preprocessing inputs directly in the function
+```python
+@llm_prompt
+def my_func_prompt(input1:list, other_input:str):
+    """
+    Current time: {current_time}
+    Do something with {input1} and {other_input}
+    """
+    # We can override values of any kwarg by returning a dict with overrides.
+    # We can also enrich the args to add prompt input from broader context
+    # that is not passed as a function argument.
+    return {
+        "input1": ",".join(input1),
+        "current_time": datetime.datetime.now().isoformat()
+    }
+```
+
+The latter approach is useful when prompts are bound to classes, allowing you to preprocess inputs while preserving access to `self` fields and variables.
+
 ## Defining custom settings
 
-Here we mark a function as a prompt with the `llm_prompt` decorator, effectively turning it into an LLMChain.
+Mark a function as a prompt with the `llm_prompt` decorator, effectively turning it into an LLMChain.
 
-A standard LLMChain takes more init parameters than just input variables and prompt; in this implementation the decorator hides those details. You can control it in several ways:
+A standard LLMChain takes more init parameters than just input variables and a prompt; the decorator hides those details. You can control it in several ways:
 
 1) Global settings:
 
