@@ -16,4 +16,4 @@ from .llm_tool_use import ToolCall, ToolsProvider
 from .llm_chat_session import LlmChatSession
 
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"

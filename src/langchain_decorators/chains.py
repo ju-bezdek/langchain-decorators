@@ -259,7 +259,7 @@ class LLMDecoratorChain(Runnable):
                     if template.role == "placeholder"
                 ):
                     logging.warning(
-                        "Message placeholder found in prompt template drafts, but there is an active LlmChatSession"
+                        "Message placeholder not found in prompt template drafts, but there is an active LlmChatSession"
                     )
             elif isinstance(formatted_prompt, StringPromptValue):
                 formatted_prompt = ChatPromptValue(

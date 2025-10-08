@@ -7,7 +7,7 @@ from langchain_decorators.prompt_decorator import llm_prompt
 
 
 @llm_prompt
-def test_prompt_with_single_attachment(attachment: MessageAttachment) -> str:
+def prompt_with_single_attachment(attachment: MessageAttachment) -> str:
     """
     ```<prompt:system>
     Your task is to understand what is on the picture and tell it to our blind user.
@@ -20,7 +20,7 @@ def test_prompt_with_single_attachment(attachment: MessageAttachment) -> str:
 
 
 @llm_prompt
-def test_prompt_with_multiple_attachments(attachments: List[MessageAttachment]) -> str:
+def prompt_with_multiple_attachments(attachments: List[MessageAttachment]) -> str:
     """
     ```<prompt:system>
     Your task is to understand what is on the picture and tell it to our blind user.
@@ -33,7 +33,7 @@ def test_prompt_with_multiple_attachments(attachments: List[MessageAttachment]) 
 
 
 @llm_prompt
-def test_prompt_with_optional_attachments(
+def prompt_with_optional_attachments(
     query: str, attachments: List[MessageAttachment] = None
 ) -> str:
     """
@@ -50,7 +50,7 @@ def test_prompt_with_optional_attachments(
 
 
 @llm_prompt
-def test_prompt_with_optional_attachment(
+def prompt_with_optional_attachment(
     query: str, attachment: MessageAttachment = None
 ) -> str:
     """
@@ -94,7 +94,7 @@ class TestAttachmentScenarios:
         )
 
         # Call the function with URL-based attachment
-        result = test_prompt_with_single_attachment(attachment=attachment)
+        result = prompt_with_single_attachment(attachment=attachment)
 
         # Basic validation that we got a response
         assert isinstance(result, str)
@@ -114,7 +114,7 @@ class TestAttachmentScenarios:
         )
 
         # Call the function with base64-based attachment
-        result = test_prompt_with_single_attachment(attachment=attachment)
+        result = prompt_with_single_attachment(attachment=attachment)
 
         # Basic validation that we got a response
         assert isinstance(result, str)
@@ -132,7 +132,7 @@ class TestAttachmentScenarios:
         )
 
         # Test with single item in list
-        result = test_prompt_with_multiple_attachments(attachments=[attachment])
+        result = prompt_with_multiple_attachments(attachments=[attachment])
 
         # Basic validation that we got a response
         assert isinstance(result, str)
@@ -152,7 +152,7 @@ class TestAttachmentScenarios:
         )
 
         # Test with single item in list
-        result = test_prompt_with_multiple_attachments(attachments=[attachment])
+        result = prompt_with_multiple_attachments(attachments=[attachment])
 
         # Basic validation that we got a response
         assert isinstance(result, str)
@@ -169,7 +169,7 @@ class TestAttachmentScenarios:
             file_name="jupiter_2024.png",
         )
 
-        result = test_prompt_with_optional_attachment(
+        result = prompt_with_optional_attachment(
             query="Can you describe this planet?", attachment=attachment
         )
 
@@ -179,7 +179,7 @@ class TestAttachmentScenarios:
 
     def test_optional_attachment_without_content(self):
         """Test optional attachment when no attachment is provided."""
-        result = test_prompt_with_optional_attachment(
+        result = prompt_with_optional_attachment(
             query="Tell me about Jupiter, the planet."
         )
 
@@ -197,7 +197,7 @@ class TestAttachmentScenarios:
             file_name="jupiter.png",
         )
 
-        result = test_prompt_with_optional_attachments(
+        result = prompt_with_optional_attachments(
             query="What do you see in this image of a celestial body?",
             attachments=[attachment],
         )
@@ -208,7 +208,7 @@ class TestAttachmentScenarios:
 
     def test_optional_attachments_list_without_content(self):
         """Test optional attachments list when no attachments are provided."""
-        result = test_prompt_with_optional_attachments(
+        result = prompt_with_optional_attachments(
             query="Tell me about the largest planet in our solar system."
         )
 
@@ -269,7 +269,7 @@ class TestAttachmentIntegration:
 
         # This would require a real LLM with vision capabilities
         try:
-            result = test_prompt_with_single_attachment(attachment=attachment)
+            result = prompt_with_single_attachment(attachment=attachment)
 
             # Check that the result mentions relevant keywords
             result_lower = result.lower()

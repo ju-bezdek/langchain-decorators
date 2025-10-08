@@ -545,8 +545,6 @@ class PromptDecoratorTemplate(StringPromptTemplate):
         else:
             # default - string prompt
             formatted = final_template.format_prompt(**kwargs)
-            if LlmChatSession.get_current_session():
-                LlmChatSession.get_current_session().remember_new_messages()
 
         self.on_prompt_formatted(formatted.to_string())
 
@@ -580,7 +578,8 @@ class PromptDecoratorTemplate(StringPromptTemplate):
 
                 for msg in message:
                     if (
-                        not msg.content or not msg.content.strip()
+                        not msg.content
+                        or not (isinstance(msg.content, str) and msg.content.strip())
                     ) and not msg.additional_kwargs:
                         continue
                     result.append(msg)
