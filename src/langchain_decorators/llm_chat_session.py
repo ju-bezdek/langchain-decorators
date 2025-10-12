@@ -215,9 +215,9 @@ class LlmChatSession:
                 message = ToolMessage(content=message)
             else:
                 raise ValueError("Invalid message type. Use 'ai', 'human', or 'tool'.")
-        if (message.type, message.content) in self._hash_set and ignore_duplicates:
+        if ignore_duplicates and (message.type, str(message.content)) in self._hash_set:
             return
-        self._hash_set.add((message.type, message.content))
+        self._hash_set.add((message.type, str(message.content)))
         self.message_history.append(message)
         if isinstance(message, AIMessage):
             self.last_llm_response = message
