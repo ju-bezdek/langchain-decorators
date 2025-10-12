@@ -48,7 +48,7 @@ class ToolsProvider:
             else:
                 function_alias = None
 
-            self.add_function(f, function_alias)
+            self.add_tool(f, function_alias)
 
     def add_tool(self, tool: Union[Callable, BaseTool], alias: str = None):
         """Add function to ToolsProvider. If alias is provided, it will be used as function name in LLM"""
