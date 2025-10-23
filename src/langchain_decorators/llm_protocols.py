@@ -11,17 +11,16 @@ easy extension for new LLM providers.
 """
 
 from abc import ABC, abstractmethod
-from os import replace
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING, Type, List, Tuple
 from langchain_core.language_models import BaseLanguageModel
 import re
 import base64
 
 # Additional imports for template building
-from langchain.prompts import PromptTemplate, StringPromptTemplate, PromptTemplate
+from langchain_core.prompts import PromptTemplate, StringPromptTemplate, PromptTemplate
 from langchain_core.prompts.dict import DictPromptTemplate
 from langchain_core.prompts.image import ImagePromptTemplate
-from langchain.prompts.chat import (
+from langchain_core.prompts.chat import (
     MessagesPlaceholder,
     ChatMessagePromptTemplate,
     ChatPromptTemplate,

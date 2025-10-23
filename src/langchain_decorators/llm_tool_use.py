@@ -2,17 +2,16 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Union, 
 import asyncio
 import logging
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar, Union, List
-from langchain.schema.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 import json
 
 from .llm_chat_session import LlmChatSession
 from pydantic import PrivateAttr, BaseModel
 from .common import deprecated
-from langchain.tools.convert_to_openai import format_tool_to_openai_function
 
 
-from langchain.tools.base import BaseTool
+from langchain_core.tools.base import BaseTool
 
 from .function_decorator import get_function_schema
 

@@ -11,11 +11,10 @@ from langchain_core.runnables.config import ensure_config, merge_configs
 from .streaming_context import StreamingContext
 from .llm_chat_session import LlmChatSession
 from .common import deprecated
-from langchain.tools.convert_to_openai import format_tool_to_openai_function
 import httpx
 import pydantic
-from langchain.callbacks.base import BaseCallbackHandler, BaseCallbackManager
-from langchain.callbacks.manager import (
+from langchain_core.callbacks.base import BaseCallbackHandler, BaseCallbackManager
+from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     CallbackManagerForChainRun,
     Callbacks,
@@ -23,18 +22,15 @@ from langchain.callbacks.manager import (
 
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableBinding
 from langchain.chat_models.base import BaseChatModel
-from langchain.prompts import PromptTemplate
-from langchain.prompts.base import StringPromptValue
-from langchain.prompts.chat import ChatPromptValue
-from langchain.schema import (
+from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts.base import StringPromptValue
+from langchain_core.prompts.chat import ChatPromptValue
+from langchain_core.messages import (
     AIMessage,
     BaseMessage,
-    ChatGeneration,
-    Generation,
     HumanMessage,
-    LLMResult,
 )
-from langchain.schema.output import LLMResult
+from langchain_core.outputs import LLMResult, ChatGeneration
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.runnables import (
     RunnableLambda,

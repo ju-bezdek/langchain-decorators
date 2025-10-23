@@ -53,6 +53,10 @@ class Agent(BaseModel):
         ```<prompt:user>
         {user_input}
         ```
+        ```
+        ```<prompt:placeholder>
+        {messages}
+        ```
         """
 
     def start(self):

@@ -16,10 +16,10 @@ from typing import (
     get_args,
     get_origin,
 )
-from langchain.tools.convert_to_openai import format_tool_to_openai_function
+
 
 from .llm_chat_session import LlmChatSession
-import pydantic
+
 
 from pydantic import BaseModel, create_model
 
@@ -28,8 +28,6 @@ from .common import (
     get_function_full_name,
 )
 from .pydantic_helpers import sanitize_pydantic_schema, get_arguments_as_pydantic_fields
-import warnings
-import functools
 
 
 class DocstringsFormat(Enum):

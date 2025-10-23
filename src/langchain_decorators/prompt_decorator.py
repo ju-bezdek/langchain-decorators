@@ -4,9 +4,9 @@ import logging
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Union
 from langchain_core.runnables.base import RunnableLambda
-from langchain.llms.base import BaseLanguageModel
-from langchain.schema import BaseOutputParser, AIMessage
-from langchain.tools.base import BaseTool
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.tools.base import BaseTool
 from langchain_core.runnables.config import RunnableConfig
 from .llm_chat_session import LlmChatSession
 from .chains import LLMDecoratorChain, ToolsProvider

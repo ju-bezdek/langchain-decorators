@@ -26,6 +26,9 @@ async def prompt_example(question: str) -> str:
     ```<prompt:user>
     Pls answer the question: {question}
     ```
+    ```<prompt:placeholder>
+    {messages}
+    ```
     """
     pass
 
@@ -74,9 +77,13 @@ async def main_async_with_tools() -> str:
             "Ok, let's do it... search for john doe emails",
         ]:
             response = None
+            counter = 0
             while not response:
                 response = await prompt_example(question=simulated_usr_msg)
                 print(response)
+                counter += 1
+                if counter > 5:
+                    raise Exception("Too many iterations, something is wrong.")
 
                 # either handle the tool calls manually ... one by one
                 for tool_call in session.last_response_tool_calls:

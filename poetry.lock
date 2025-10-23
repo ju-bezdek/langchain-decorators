@@ -630,43 +630,77 @@ bench = ["fastjsonschema (>=2.20.0)", "jsonschema (>=4.23.0)", "pytest-benchmark
 tests = ["flask (>=2.2.5)", "hypothesis (>=6.79.4)", "pytest (>=7.4.4)"]
 
 [[package]]
-name = "langchain-core"
-version = "0.3.74"
+name = "langchain"
+version = "1.0.2"
 description = "Building applications with LLMs through composability"
 optional = false
-python-versions = ">=3.9"
-groups = ["main", "dev"]
+python-versions = "<4.0.0,>=3.10.0"
+groups = ["dev"]
 files = [
-    {file = "langchain_core-0.3.74-py3-none-any.whl", hash = "sha256:088338b5bc2f6a66892f9afc777992c24ee3188f41cbc603d09181e34a228ce7"},
-    {file = "langchain_core-0.3.74.tar.gz", hash = "sha256:ff604441aeade942fbcc0a3860a592daba7671345230c2078ba2eb5f82b6ba76"},
+    {file = "langchain-1.0.2-py3-none-any.whl", hash = "sha256:e0c5647ea47cde7feb9534f56f4496c7f86a45084ad9bd152e7b19739f210ead"},
+    {file = "langchain-1.0.2.tar.gz", hash = "sha256:22f814c7b4f5f76e945c35924ff288f6dfbe33747db2a029162ef1d4f8566493"},
 ]
 
 [package.dependencies]
-jsonpatch = ">=1.33,<2.0"
-langsmith = ">=0.3.45"
-packaging = ">=23.2"
-pydantic = ">=2.7.4"
-PyYAML = ">=5.3"
+langchain-core = ">=1.0.0,<2.0.0"
+langgraph = ">=1.0.0,<1.1.0"
+pydantic = ">=2.7.4,<3.0.0"
+
+[package.extras]
+anthropic = ["langchain-anthropic"]
+aws = ["langchain-aws"]
+community = ["langchain-community"]
+deepseek = ["langchain-deepseek"]
+fireworks = ["langchain-fireworks"]
+google-genai = ["langchain-google-genai"]
+google-vertexai = ["langchain-google-vertexai"]
+groq = ["langchain-groq"]
+huggingface = ["langchain-huggingface"]
+mistralai = ["langchain-mistralai"]
+ollama = ["langchain-ollama"]
+openai = ["langchain-openai"]
+perplexity = ["langchain-perplexity"]
+together = ["langchain-together"]
+xai = ["langchain-xai"]
+
+[[package]]
+name = "langchain-core"
+version = "1.0.0"
+description = "Building applications with LLMs through composability"
+optional = false
+python-versions = "<4.0.0,>=3.10.0"
+groups = ["main", "dev"]
+files = [
+    {file = "langchain_core-1.0.0-py3-none-any.whl", hash = "sha256:a94561bf75dd097c7d6e3864950f28dadc963f0bd810114de4095f41f634059b"},
+    {file = "langchain_core-1.0.0.tar.gz", hash = "sha256:8e81c94a22fa3a362a0f101bbd1271bf3725e50cf1e31c84e8f4a1c731279785"},
+]
+
+[package.dependencies]
+jsonpatch = ">=1.33.0,<2.0.0"
+langsmith = ">=0.3.45,<1.0.0"
+packaging = ">=23.2.0,<26.0.0"
+pydantic = ">=2.7.4,<3.0.0"
+pyyaml = ">=5.3.0,<7.0.0"
 tenacity = ">=8.1.0,<8.4.0 || >8.4.0,<10.0.0"
-typing-extensions = ">=4.7"
+typing-extensions = ">=4.7.0,<5.0.0"
 
 [[package]]
 name = "langgraph"
-version = "0.6.5"
+version = "1.0.1"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
-    {file = "langgraph-0.6.5-py3-none-any.whl", hash = "sha256:042b2ee7af6f308659520eea5ba6def50f2d109475691666045850d0661b1082"},
-    {file = "langgraph-0.6.5.tar.gz", hash = "sha256:59639927997457fe04f802b39f0e7179cedf8db1cf85f33db764de02ae23c2f0"},
+    {file = "langgraph-1.0.1-py3-none-any.whl", hash = "sha256:892f04f64f4889abc80140265cc6bd57823dd8e327a5eef4968875f2cd9013bd"},
+    {file = "langgraph-1.0.1.tar.gz", hash = "sha256:4985b32ceabb046a802621660836355dfcf2402c5876675dc353db684aa8f563"},
 ]
 
 [package.dependencies]
 langchain-core = ">=0.1"
-langgraph-checkpoint = ">=2.1.0,<3.0.0"
-langgraph-prebuilt = ">=0.6.0,<0.7.0"
-langgraph-sdk = ">=0.2.0,<0.3.0"
+langgraph-checkpoint = ">=2.1.0,<4.0.0"
+langgraph-prebuilt = ">=1.0.0,<1.1.0"
+langgraph-sdk = ">=0.2.2,<0.3.0"
 pydantic = ">=2.7.4"
 xxhash = ">=3.5.0"
 
@@ -743,19 +777,19 @@ inmem = ["langgraph-api (>=0.3,<0.5.0) ; python_version >= \"3.11\"", "langgraph
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.6.4"
+version = "1.0.1"
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
-    {file = "langgraph_prebuilt-0.6.4-py3-none-any.whl", hash = "sha256:819f31d88b84cb2729ff1b79db2d51e9506b8fb7aaacfc0d359d4fe16e717344"},
-    {file = "langgraph_prebuilt-0.6.4.tar.gz", hash = "sha256:e9e53b906ee5df46541d1dc5303239e815d3ec551e52bb03dd6463acc79ec28f"},
+    {file = "langgraph_prebuilt-1.0.1-py3-none-any.whl", hash = "sha256:8c02e023538f7ef6ad5ed76219ba1ab4f6de0e31b749e4d278f57a8a95eec9f7"},
+    {file = "langgraph_prebuilt-1.0.1.tar.gz", hash = "sha256:ecbfb9024d9d7ed9652dde24eef894650aaab96bf79228e862c503e2a060b469"},
 ]
 
 [package.dependencies]
 langchain-core = ">=0.3.67"
-langgraph-checkpoint = ">=2.1.0,<3.0.0"
+langgraph-checkpoint = ">=2.1.0,<4.0.0"
 
 [[package]]
 name = "langgraph-runtime-inmem"
@@ -779,14 +813,14 @@ structlog = ">23"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.2.0"
+version = "0.2.9"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = ">=3.9"
 groups = ["main", "dev"]
 files = [
-    {file = "langgraph_sdk-0.2.0-py3-none-any.whl", hash = "sha256:150722264f225c4d47bbe7394676be102fdbf04c4400a0dd1bd41a70c6430cc7"},
-    {file = "langgraph_sdk-0.2.0.tar.gz", hash = "sha256:cd8b5f6595e5571be5cbffd04cf936978ab8f5d1005517c99715947ef871e246"},
+    {file = "langgraph_sdk-0.2.9-py3-none-any.whl", hash = "sha256:fbf302edadbf0fb343596f91c597794e936ef68eebc0d3e1d358b6f9f72a1429"},
+    {file = "langgraph_sdk-0.2.9.tar.gz", hash = "sha256:b3bd04c6be4fa382996cd2be8fbc1e7cc94857d2bc6b6f4599a7f2a245975303"},
 ]
 
 [package.dependencies]
@@ -2194,5 +2228,5 @@ langgraph = ["langgraph"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.11"
-content-hash = "b2e0bc91e16d97aae67618cac866ab1df458ffe6c5776be4379e60aacb373c05"
+python-versions = ">=3.11,<4.0.0"
+content-hash = "e4d78c2085fd9824437cd2d7d890904fc4d4372f1b33992d6763c5c8432c2f26"

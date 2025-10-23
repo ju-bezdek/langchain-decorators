@@ -2,12 +2,11 @@ import asyncio
 from contextvars import ContextVar
 import json
 from typing import TYPE_CHECKING, Callable, Coroutine, Literal, Optional, Union
-from langchain.tools.base import BaseTool
+from langchain_core.tools.base import BaseTool
 
 
-from langchain.schema.messages import ToolMessage, AIMessage, HumanMessage, BaseMessage
-from langchain.prompts.chat import MessagesPlaceholder
-from openai import BaseModel
+from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, BaseMessage
+
 
 if TYPE_CHECKING:
     from .llm_tool_use import ToolsProvider, ToolCall  # Avoid circular import issues

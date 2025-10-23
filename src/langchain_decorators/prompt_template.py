@@ -24,27 +24,21 @@ from typing import (
 )
 
 
-from langchain.prompts import StringPromptTemplate, PromptTemplate
-from langchain.prompts.chat import (
+from langchain_core.prompts import StringPromptTemplate, PromptTemplate
+from langchain_core.prompts.chat import (
     MessagesPlaceholder,
     ChatMessagePromptTemplate,
-    HumanMessagePromptTemplate,
-    AIMessagePromptTemplate,
-    SystemMessagePromptTemplate,
     ChatPromptTemplate,
     ChatPromptValue,
 )
-from langchain.schema import (
-    PromptValue,
-    BaseOutputParser,
-    BaseMemory,
-    BaseChatMessageHistory,
-)
+
+from langchain_core.output_parsers.base import BaseOutputParser
+from langchain_core.prompt_values import PromptValue
+
 from .llm_chat_session import LlmChatSession
 
 from .schema import MessageAttachment, OutputWithFunctionCall, PydanticListTypeWrapper
 from .common import (
-    LogColors,
     PromptTypeSettings,
     get_func_return_type,
     get_function_docs,
@@ -68,6 +62,13 @@ else:
         from pydantic.v1 import Field
     else:
         from pydantic import BaseModel, Field
+
+from langchain_core.chat_history import BaseChatMessageHistory
+
+try:
+    from langchain_classic.base_memory import BaseMemory
+except ImportError:
+    BaseMemory = None
 
 
 def parse_prompts_from_docs(docs: str):
@@ -533,11 +534,12 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                         kwargs[msg.variable_name] = [kwargs.get(msg.variable_name)]
 
         for key, value in list(kwargs.items()):
-            if isinstance(value, BaseMemory):
-                memory: BaseMemory = kwargs.pop(key)
+            if BaseMemory:
+                if isinstance(value, BaseMemory):
+                    memory = kwargs.pop(key)
 
-                kwargs.update(memory.load_memory_variables(kwargs))
-            elif isinstance(value, BaseChatMessageHistory):
+                    kwargs.update(memory.load_memory_variables(kwargs))
+            if isinstance(value, BaseChatMessageHistory):
                 kwargs[key] = value.messages
 
         if isinstance(final_template, ChatPromptTemplate):

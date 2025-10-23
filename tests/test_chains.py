@@ -1,7 +1,7 @@
 import pytest
 import os
 import asyncio
-from langchain.schema import AIMessage, HumanMessage, FunctionMessage
+from langchain_core.messages import AIMessage, HumanMessage, FunctionMessage
 from langchain.chat_models.base import BaseChatModel
 from pydantic import BaseModel, Field
 from typing import List, Dict, Literal, Optional, Callable

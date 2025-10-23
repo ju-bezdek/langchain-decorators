@@ -5,7 +5,7 @@ from typing import Any, Callable, Coroutine
 
 
 class StreamingContext:
-    from langchain.callbacks.base import AsyncCallbackHandler
+    from langchain_core.callbacks.base import AsyncCallbackHandler
 
     class StreamingContextCallback(AsyncCallbackHandler):
 

@@ -24,10 +24,10 @@ from typing import (
     get_origin,
     TYPE_CHECKING,
 )
-from langchain.llms.base import BaseLanguageModel
+from langchain.chat_models import BaseChatModel
 from langchain_core.runnables import RunnableWithFallbacks
-from langchain.schema import BaseMessage
-from langchain.prompts.chat import ChatMessagePromptTemplate
+from langchain_core.messages import BaseMessage
+from langchain_core.prompts.chat import ChatMessagePromptTemplate
 
 from typing_inspect import is_generic_type, is_union_type
 
@@ -41,7 +41,7 @@ try:
 except ImportError:
 
     def init_chat_model(model_name: str, **kwargs):
-        from langchain.chat_models import ChatOpenAI
+        from langchain_openai import ChatOpenAI
 
         return ChatOpenAI(model_name=model_name, **kwargs)
 
@@ -71,8 +71,8 @@ else:
 class LlmSelector(BaseModel):
 
     rules: List[dict] = []
-    llms: Dict[int, BaseLanguageModel] = Field(default_factory=dict)
-    streamable_llms_cache: Dict[int, BaseLanguageModel] = Field(default_factory=dict)
+    llms: Dict[int, BaseChatModel] = Field(default_factory=dict)
+    streamable_llms_cache: Dict[int, BaseChatModel] = Field(default_factory=dict)
     generation_min_tokens: Optional[int]
     prompt_to_generation_ratio: Optional[float]
 
@@ -92,28 +92,28 @@ class LlmSelector(BaseModel):
             prompt_to_generation_ratio=prompt_to_generation_ratio,
         )
 
-    def with_llm(self, llm: BaseLanguageModel, llm_selector_rule_key: str = None):
+    def with_llm(self, llm: BaseChatModel, llm_selector_rule_key: str = None):
         """this will automatically add a rule with token window based on the model name. Only works for OpenAI and Anthropic models."""
-        max_tokens = self.get_model_window(llm.model_name)
+        max_tokens = self.get_model_window(llm.name)
         if max_tokens:
             self.with_llm_rule(
                 llm, max_tokens, llm_selector_rule_key=llm_selector_rule_key
             )
         else:
             raise Exception(
-                f"Could not find a token limit for model {llm.model_name}. Please use `with_llm_rule` and specify the max_tokens for your model."
+                f"Could not find a token limit for model {llm.name}. Please use `with_llm_rule` and specify the max_tokens for your model."
             )
 
         return self
 
     def with_llm_rule(
-        self, llm: BaseLanguageModel, max_tokens: int, llm_selector_rule_key: str = None
+        self, llm: BaseChatModel, max_tokens: int, llm_selector_rule_key: str = None
     ):
         """Add a LLM with a selection rule defined by max tokens and llm_selector_rule_key.
 
 
         Args:
-            llm (BaseLanguageModel): The LLM to add
+            llm (BaseChatModel): The LLM to add
             max_tokens (int): The maximum number of tokens that the LLM can generate / we want it to use it for.
             llm_selector_rule_key (str, optional): Optional selection key to limit the selection by. This allows us to pick LLM only from a subset of LLMs (or even just one). Defaults to None.
 
@@ -127,7 +127,7 @@ class LlmSelector(BaseModel):
 
     def get_model_window(self, model_name: str) -> int:
         for model_pattern, max_tokens in MODEL_LIMITS.items():
-            if re.match(model_pattern, model_name):
+            if model_name and re.match(model_pattern, model_name):
                 return max_tokens
         return 100_000  # unknown model, assume very large context
 
@@ -138,7 +138,7 @@ class LlmSelector(BaseModel):
         expected_generated_tokens: int = None,
         streaming=False,
         llm_selector_rule_key: str = None,
-    ) -> BaseLanguageModel:
+    ) -> BaseChatModel:
         """Picks the best LLM based on the rules and the prompt length.
 
         Args:
@@ -246,7 +246,7 @@ class LlmSelector(BaseModel):
 
 
 class GlobalSettings(BaseModel):
-    default_llm: Union[BaseLanguageModel, RunnableWithFallbacks, None] = None
+    default_llm: Union[BaseChatModel, RunnableWithFallbacks, None] = None
     logging_level: int = logging.INFO
     verbose: bool = False
     llm_selector: Optional[LlmSelector] = None
@@ -271,7 +271,7 @@ class GlobalSettings(BaseModel):
     def define_settings(
         cls,
         settings_type="default",
-        default_llm: Union[BaseLanguageModel, RunnableWithFallbacks, str] = None,
+        default_llm: Union[BaseChatModel, RunnableWithFallbacks, str] = None,
         logging_level=logging.INFO,
         verbose=None,
         llm_selector: Optional["LlmSelector"] = None,
@@ -281,7 +281,7 @@ class GlobalSettings(BaseModel):
 
         Args:
             settings_type (str, optional): The name of the settings. Defaults to "default".
-            default_llm (BaseLanguageModel, optional): The default language model to use. Defaults to None.
+            default_llm (BaseChatModel, optional): The default language model to use. Defaults to None.
             llm_selector (Optional[LlmSelector], optional): The language model selector to use. Defaults to None.
             logging_level (int, optional): The logging level to use. Defaults to logging.INFO.
 
@@ -379,7 +379,7 @@ class PromptTypeSettings:
 
     def __init__(
         self,
-        llm: BaseLanguageModel = None,
+        llm: BaseChatModel = None,
         color: LogColors = None,
         log_level: Union[int, str] = "info",
         capture_stream: Union[bool, None] = None,
@@ -612,7 +612,7 @@ def get_function_full_name(func: callable) -> str:
     )
 
 
-def make_llm_streamable(llm: BaseLanguageModel):
+def make_llm_streamable(llm: BaseChatModel):
     try:
         if hasattr(llm, "lc_kwargs"):
             # older version support
@@ -629,7 +629,7 @@ def make_llm_streamable(llm: BaseLanguageModel):
         logging.warning(f"Could not make llm {llm} streamable. Error: {e}")
 
 
-def count_tokens(prompt: Union[str, List[BaseMessage]], llm: BaseLanguageModel) -> int:
+def count_tokens(prompt: Union[str, List[BaseMessage]], llm: BaseChatModel) -> int:
     """Returns the number of tokens in a text string."""
     if isinstance(prompt, str):
         return llm.get_num_tokens(prompt)
