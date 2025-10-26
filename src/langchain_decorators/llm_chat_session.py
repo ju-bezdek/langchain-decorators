@@ -61,7 +61,7 @@ class LlmChatSession:
         self.suppressed_structured_output = False
         self.on_stream_token = on_stream_token
         self._streaming_context = None
-        self._hash_set = set(((m.type, m.content) for m in self.message_history))
+        self._hash_set = set(((m.type, str(m.content)) for m in self.message_history))
 
     def get_prompt_context(self) -> dict:
         """Get the current context of the session."""

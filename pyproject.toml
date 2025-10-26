@@ -6,7 +6,7 @@ dependencies = ["typing-inspect", "langchain-core (>=1.0.0,<2.0.0)"]
 authors = [
     {name = "ju-bezdek", email = "juraj.bezdek@gmail.com"}
 ]
-version = "1.1.0"
+version = "1.1.1"
 readme = "README.md"
 requires-python = ">=3.11,<4.0.0"
 license = {text = "MIT"}

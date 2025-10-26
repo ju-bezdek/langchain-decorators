@@ -580,8 +580,11 @@ class PromptDecoratorTemplate(StringPromptTemplate):
 
                 for msg in message:
                     if (
-                        not msg.content
-                        or not (isinstance(msg.content, str) and msg.content.strip())
+                        msg.content is None
+                        or (
+                            isinstance(msg.content, str)
+                            and len(msg.content.strip()) == 0
+                        )
                     ) and not msg.additional_kwargs:
                         continue
                     result.append(msg)
