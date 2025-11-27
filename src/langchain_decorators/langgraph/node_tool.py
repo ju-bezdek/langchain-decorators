@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from langchain_core.tools import BaseTool, tool, StructuredTool
 import functools
 import inspect
@@ -38,6 +39,7 @@ class NodeTool(StructuredTool):
         node_class: Type = None,
         require_confirmation: bool = False,
         bind_to_prompt_nodes: list[str] | None = None,
+        response_format: Literal["content", "content_and_artifact"] = "content",
         **kwargs,
     ):
         super().__init__(
@@ -48,8 +50,9 @@ class NodeTool(StructuredTool):
             args_schema=args_schema,
             node_class=node_class,
             require_confirmation=require_confirmation,
-            bound_func="." in repr(func),
+            bound_func="." in func.__qualname__,
             bind_to_prompt_nodes=bind_to_prompt_nodes,
+            response_format=response_format,
             **kwargs,
         )
 
@@ -102,17 +105,25 @@ class NodeTool(StructuredTool):
         res = await super().ainvoke(input, *args, **kwargs)
         return self.postprocess(res, input)
 
-    def postprocess(self, result: Any, input: dict) -> Any:
-        if isinstance(result, Command):
-            if isinstance(result.update, dict):
-                if not result.update.get("messages"):
-                    result.update["messages"] = [
-                        ToolMessage(
-                            tool_name=self.name,
-                            tool_call_id=input.get("id"),
-                            content=f"Done",
-                        )
-                    ]
+    def postprocess(self, result: ToolMessage, input: dict) -> Any:
+
+        if isinstance(result, ToolMessage) and isinstance(result.artifact, Command):
+            cmd = result.artifact
+
+        elif isinstance(result, Command):
+            cmd = result
+            tool_message = ToolMessage(
+                tool_name=self.name,
+                tool_call_id=input.get("id"),
+                content="Done",
+            )
+        else:
+            cmd = None
+
+        if cmd and isinstance(cmd.update, dict):
+            if not cmd.update.get("messages"):
+                cmd.update["messages"] = [tool_message]
+                return cmd
 
         return result
 
@@ -154,6 +165,7 @@ def node_tool(
     bind_to_prompt_nodes: list[str] | None = None,
     args_schema=None,
     require_confirmation=False,
+    response_format: Literal["content", "content_and_artifact"] = "content",
     **kwargs,
 ):
     """
@@ -197,6 +209,8 @@ def node_tool(
             args_schema=func_info,
             require_confirmation=require_confirmation,
             bind_to_prompt_nodes=bind_to_prompt_nodes,
+            response_format=response_format,
+            **kwargs,
         )
 
         # Add metadata attributes

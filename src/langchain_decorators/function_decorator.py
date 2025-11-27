@@ -218,8 +218,9 @@ def llm_function(
 
         func_wrapper.get_function_schema = get_function_schema
         func_wrapper.is_dynamic = dynamic_schema
-        func_wrapper.function_name = function_name or func.__name__
-
+        func_wrapper.name = function_name or func.__name__
+        # backwards compatibility
+        func_wrapper.function_name = func_wrapper.name
         return func_wrapper
 
     if func:
@@ -312,6 +313,11 @@ def build_func_schema(
             )
     else:
         arguments_fields = get_arguments_as_pydantic_fields(func)
+        for k, v in list(arguments_fields.items()):
+            v = str(v)
+            if v.startswith("(typing.Annotated") and "langchain" in v:
+                # we have some langchain Annotated field... remove/ignore it
+                arguments_fields.pop(k)
 
         if func_docs:
             docstrings_param_description = find_and_parse_params_from_docstrings(
@@ -549,7 +555,7 @@ def find_and_parse_params_from_docstrings(
 
 def parse_enum_from_docstring_param(type: str, description) -> str:
     def match(input: str):
-        brackets_pattern = f"\[(.*?)\]"
+        brackets_pattern = f"\\[(.*?)\\]"
         enums_candidates = re.search(brackets_pattern, input)
         if not enums_candidates:
             return None

@@ -334,14 +334,14 @@ class ToolCall(BaseModel):
         """
         Executes the tool call and sets the result ... regardless of whether the function is async or sync.
         """
-        _res = await self(**kwargs)
+        _res = self(**kwargs)
         if asyncio.iscoroutine(_res):
             self._result_original_value = await _res
         else:
             self._result_original_value = _res
 
-        self.set_result(_res)
-        return _res
+        self.set_result(self._result_original_value)
+        return self._result_original_value
 
     def __call__(self, **kwargs):
         """Calls the function with the provided arguments."""

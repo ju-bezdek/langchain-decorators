@@ -155,7 +155,7 @@ class LlmNodeBase:
         self, prompt_node: str, prompt_call: callable, kwargs: dict[str, Any]
     ) -> AnyMessage:
         with LlmChatSession(
-            tools=self.get_tools(prompt_node), message_history=self.messages
+            tools=self.get_llm_node_tools(prompt_node), message_history=[*self.messages]
         ) as session:
             prompt_response = prompt_call(**kwargs)
             session.last_llm_response.response_metadata["graph_node"] = prompt_node
@@ -167,7 +167,7 @@ class LlmNodeBase:
         self, prompt_node: str, prompt_call: callable, kwargs: dict[str, Any]
     ) -> AnyMessage:
         with LlmChatSession(
-            tools=self.get_tools(prompt_node), message_history=self.messages
+            tools=self.get_llm_node_tools(prompt_node), message_history=[*self.messages]
         ).with_stream(lambda token: None) as session:
             prompt_response = prompt_call(**kwargs)
             if asyncio.iscoroutine(prompt_response):
@@ -206,17 +206,33 @@ class LlmNodeBase:
             updates = {}
         return {"messages": [ai_message], **updates}
 
-    def get_tools(self, prompt_node: str):
+    def get_llm_node_tools(self, prompt_node: str):
         return self._get_tools_for_node(prompt_node)
 
     def _get_tools_for_node(self, prompt_node: str):
-        tools = self.get_description()["tools"]
+        tools_defined = self.get_description()["tools"]
+
+        return [
+            tool
+            for tool in self.get_all_available_tools()
+            if not (
+                tools_defined.get(tool.name)
+                and prompt_node not in tools_defined[tool.name]
+            )
+        ]
+
+    @classmethod
+    def get_all_available_tools(cls):
+        tools = cls.get_description()["tools"]
+        res = []
         if tools:
-            return [
-                getattr(self, tool_name)
-                for tool_name, bind_to_prompts in tools.items()
-                if not (bind_to_prompts and prompt_node not in bind_to_prompts)
-            ]
+            res.extend([getattr(cls, tool_name) for tool_name in tools.keys()])
+        res.extend(cls.get_additional_tools())
+        return res
+
+    @classmethod
+    def get_additional_tools(cls):
+        return []
 
     def __getitem__(self, key: str) -> Any:
         """
@@ -400,9 +416,7 @@ class LlmNodeBase:
                 BoundedToolNode(
                     name=tools_key,
                     node_class=cls,
-                    tools=[
-                        getattr(cls, tool_name) for tool_name in description["tools"]
-                    ],
+                    tools=cls.get_all_available_tools(),
                 ),
             )
             prompt_nodes_with_tools = set()
@@ -601,4 +615,11 @@ class BoundedToolNode(ToolNode):
 
         enriched_tool_call = super().inject_tool_args(tool_call, input, store)
         self._inject_self_node(enriched_tool_call, input)
+        return enriched_tool_call
+
+    def _inject_runtime(  # for langraph >1.0.0
+        self, tool_call: ToolCall, tool_runtime
+    ) -> ToolCall:
+        enriched_tool_call = super()._inject_runtime(tool_call, tool_runtime)
+        self._inject_self_node(enriched_tool_call, tool_runtime.state)
         return enriched_tool_call
