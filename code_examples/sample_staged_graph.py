@@ -323,7 +323,10 @@ async def _console_run():
             print(
                 f"\033[90m{default_answer} (default answer, just hit Enter to confirm.. or write your own)\033[0m"
             )
-        return input(prompt).strip() or default_answer or ""
+        try:
+            return input(prompt).strip() or default_answer or ""
+        except EOFError:
+            return default_answer
 
     user = _input(
         "You: ",

@@ -22,6 +22,8 @@ def get_example_files():
 
     skip_files = [
         "custom_template_block_builder_llama2.py",  # This requires deepinfra API token
+        "tool_calling.py",  # This requires user input, which is not suitable for automated testing
+        "sample_staged_graph.py",  # This requires user input, which is not suitable for automated testing
     ]
     return [
         f for f in python_files if f.name != "__init__.py" if f.name not in skip_files

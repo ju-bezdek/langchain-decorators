@@ -1,7 +1,7 @@
 from langchain_decorators.prompt_template import PromptDecoratorTemplate
 from langchain_decorators.prompt_decorator import llm_prompt
 import pytest
-from langchain.schema.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from langchain_decorators.llm_chat_session import LlmChatSession
 from langchain_decorators.function_decorator import get_function_schema, llm_function

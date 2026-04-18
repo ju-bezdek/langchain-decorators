@@ -1,6 +1,6 @@
 import json
 from langchain_decorators.prompt_decorator import llm_prompt
-from langchain.schema import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 
 @llm_prompt()

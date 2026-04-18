@@ -3,18 +3,18 @@ import pytest
 import os
 from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
-from langchain.schema import AIMessage, HumanMessage
+
 from langchain.chat_models.base import BaseChatModel
-from langchain.memory import ConversationBufferMemory
+
 
 from langchain_decorators import (
-    llm_prompt, 
-    GlobalSettings, 
-    PromptTypes, 
+    llm_prompt,
+    GlobalSettings,
+    PromptTypes,
     PromptTypeSettings,
     OutputWithFunctionCall,
     StreamingContext,
-    FollowupHandle
+    FollowupHandle,
 )
 
 
@@ -41,6 +41,7 @@ class TestLLMPromptDecorator:
 
     def test_basic_prompt_sync(self, setup_real_llm):
         """Test basic prompt decorator functionality - sync"""
+
         @llm_prompt
         def write_haiku(topic: str) -> str:
             """Write a haiku about {topic}. Keep it simple and traditional."""
@@ -52,7 +53,7 @@ class TestLLMPromptDecorator:
         assert isinstance(result, str)
         assert len(result.strip()) > 0
         # Should have multiple lines for haiku
-        assert '\n' in result.strip()
+        assert "\n" in result.strip()
 
     @pytest.mark.asyncio
     async def test_basic_prompt_async(self, setup_real_llm):
@@ -180,6 +181,7 @@ class TestLLMPromptDecorator:
 
     def test_chat_message_templates_sync(self, setup_real_llm):
         """Test chat message template syntax - sync"""
+
         @llm_prompt
         def roleplay_conversation(character: str, situation: str) -> str:
             """
@@ -196,8 +198,8 @@ class TestLLMPromptDecorator:
             pass
 
         result = roleplay_conversation(
-            character="a friendly librarian", 
-            situation="Someone asks for help finding a book about space"
+            character="a friendly librarian",
+            situation="Someone asks for help finding a book about space",
         )
 
         assert isinstance(result, str)
@@ -236,6 +238,7 @@ class TestLLMPromptDecorator:
 
     def test_output_parser_list_sync(self, setup_real_llm):
         """Test automatic list output parsing - sync"""
+
         @llm_prompt
         def brainstorm_ideas(topic: str, count: int = 3) -> List[str]:
             """Brainstorm {count} creative ideas for {topic}. Return as a list."""
@@ -266,6 +269,7 @@ class TestLLMPromptDecorator:
 
     def test_pydantic_output_parser_sync(self, setup_real_llm):
         """Test automatic pydantic model output parsing - sync"""
+
         class BookInfo(BaseModel):
             title: str = Field(description="Book title")
             author: str = Field(description="Author name")
@@ -314,8 +318,11 @@ class TestLLMPromptDecorator:
 
     def test_followup_handle_sync(self, setup_real_llm):
         """Test followup functionality - sync"""
+
         @llm_prompt
-        def start_conversation(topic: str, followup_handle: FollowupHandle = None) -> str:
+        def start_conversation(
+            topic: str, followup_handle: FollowupHandle = None
+        ) -> str:
             """Let's discuss {topic}. Give me a brief overview to start our conversation."""
             pass
 
