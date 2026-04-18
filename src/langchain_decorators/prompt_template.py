@@ -589,7 +589,9 @@ class PromptDecoratorTemplate(StringPromptTemplate):
                         continue
                     result.append(msg)
                     if found_session_placeholder:
-                        found_session_placeholder.add_message(msg)
+                        found_session_placeholder.add_message(
+                            msg, ignore_duplicates=True
+                        )
 
             else:
                 msg = f"Unexpected input: {message_template}"

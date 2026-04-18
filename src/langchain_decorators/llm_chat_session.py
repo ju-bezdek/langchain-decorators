@@ -214,6 +214,16 @@ class LlmChatSession:
                 message = ToolMessage(content=message)
             else:
                 raise ValueError("Invalid message type. Use 'ai', 'human', or 'tool'.")
+        else:
+            if message.id and any(
+                m for m in self.message_history if m.id == message.id
+            ):
+                if ignore_duplicates:
+                    return
+                else:
+                    raise ValueError(
+                        f"Message with id {message.id} already exists in history."
+                    )
         if ignore_duplicates and (message.type, str(message.content)) in self._hash_set:
             return
         self._hash_set.add((message.type, str(message.content)))
