@@ -261,7 +261,9 @@ class PydanticOutputParser(BaseOutputParser[T]):
         except ValidationError as e:
             try:
                 json_dict_aligned = align_fields_with_model(json_dict, self.model)
-                return self.model.parse_obj(json_dict_aligned)
+                if USE_PYDANTIC_V1:
+                    return self.model.parse_obj(json_dict_aligned)
+                return self.model.model_validate(json_dict_aligned)
             except ValidationError as e:
                 err_msg = humanize_pydantic_validation_error(e)
                 raise OutputParserExceptionWithOriginal(
@@ -542,7 +544,7 @@ class PydanticOutputParser(BaseOutputParser[T]):
         if not self.instructions_as_json_example:
             return (
                 "Return result as a valid JSON that matched this json schema definition:\n"
-                + yaml.safe_dump(self.model.schema())
+                + yaml.safe_dump(self.model.schema() if USE_PYDANTIC_V1 else self.model.model_json_schema())
             )
         else:
             json_example = self.get_json_example_description(self.model)
@@ -564,7 +566,9 @@ class OpenAIFunctionsPydanticOutputParser(BaseOutputParser[T]):
 
     def parse(self, function_call_arguments: dict) -> T:
         try:
-            return self.model.parse_obj(function_call_arguments)
+            if USE_PYDANTIC_V1:
+                return self.model.parse_obj(function_call_arguments)
+            return self.model.model_validate(function_call_arguments)
         except ValidationError as e:
             err_msg = humanize_pydantic_validation_error(e)
             serialized = json.dumps(function_call_arguments)
